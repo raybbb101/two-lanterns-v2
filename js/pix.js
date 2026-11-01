@@ -300,7 +300,7 @@ export class PixRenderer {
         if (d.t !== 'golem') L.add(FX.poof, { x, y });
         break;
       }
-      case 'boom': L.add(FX.smallExplosion, { x: P(d.x), y: P(d.y) + 8 }); break;
+      case 'boom': L.add(FX.smallExplosion, { x: P(d.x), y: P(d.y) + 8, palette: d.p ? PFX_PAL[d.p] : undefined }); break;
       case 'whirl': L.add(FX.spinSlash, { x: P(d.x), y: P(d.y) }); break;
       case 'dash': if (d.blink) { L.add(FX.blinkIn, { x: P(d.x), y: P(d.y), actor: EMPTY_ACTOR }); break; } L.add(FX.blinkOut, { x: P(d.x), y: P(d.y), actor: EMPTY_ACTOR, palette: ['#062a26', '#0e5a52', '#1a8a7a', '#3ac0a8', '#7fe8d6', '#c8fff4', '#ffffff'] }); L.add(FX.blinkIn, { x: P(d.x2), y: P(d.y2), actor: EMPTY_ACTOR, palette: ['#062a26', '#0e5a52', '#1a8a7a', '#3ac0a8', '#7fe8d6', '#c8fff4', '#ffffff'] }); break;
       case 'heal': L.add(FX.healAoe, { x: P(d.x), y: P(d.y), layer: 'ground' }); L.add(FX.heal, { x: P(d.x), y: P(d.y) }); break;
@@ -343,6 +343,7 @@ export class PixRenderer {
         if (d.p) o.palette = PFX_PAL[d.p];
         if (d.life) o.life = d.life;
         if (d.h) o.height = 20;
+        if (d.ground) o.layer = 'ground';
         L.add(FX[d.n], o);
         break;
       }
@@ -541,6 +542,7 @@ export class PixRenderer {
       let fx;
       if (p.kind === 'arrow') fx = L.add(FX.arrow, { follow, ...follow(), palette: p.rar >= 2 ? [RARE_RAMP[p.rar][2], RARE_RAMP[p.rar][4], '#e8e2d6', '#ffffff'] : undefined });
       else if (p.kind === 'fireball') fx = L.add(FX.fireball, { follow, ...follow(), radius: 5 });
+      else if (p.kind === 'bluefire') fx = L.add(FX.fireball, { follow, ...follow(), radius: 6, palette: PFX_PAL.blue });
       else if (p.kind === 'bolt') fx = L.add(FX.plasmaShot, { follow, ...follow(), palette: RARE_RAMP[Math.max(2, p.rar || 0)].concat(['#ffffff']), size: 4 });
       else if (p.kind === 'lance') fx = L.add(FX.iceLance, { follow, ...follow() });
       else if (p.kind === 'eorb') fx = L.add(FX.plasmaShot, { follow, ...follow(), palette: FIRE_RAMP.slice(1), size: 4 });
@@ -755,6 +757,7 @@ export class PixRenderer {
     if (g.portal) { const pp = g.portalPos(); Lt(P(pp.x), P(pp.y) - 20, 190, '#5ad0ff', 0.9); }
     for (const p of g.projs) {
       if (p.kind === 'fireball') Lt(P(p.x), P(p.y) - 12, 120, '#ff8a3a', 1);
+      else if (p.kind === 'bluefire') Lt(P(p.x), P(p.y) - 12, 120, '#5ab0ff', 1);
       else if (p.kind === 'bolt') Lt(P(p.x), P(p.y) - 12, 85, '#7fc8ff', 0.8);
       else if (p.kind === 'eorb') Lt(P(p.x), P(p.y) - 12, 80, '#ff8a3a', 0.8);
     }
@@ -789,7 +792,11 @@ const SPR = (rows, pal) => {
   return c;
 };
 const STONE = ['#1a1824', '#3a3648', '#5a546e', '#867e9a', '#b8b0c8', '#d8d4e0', '#f0eef4', '#ffffff'];
-const PFX_PAL = {
+export const PFX_PAL = {
+  blue: ['#0a1a4a', '#14388a', '#2460d0', '#3a90f0', '#62c8f4', '#a6ecff', '#dcfbff', '#ffffff', '#ffffff'],
+  red: ['#2a060e', '#6a0e1c', '#a81a2a', '#e03040', '#ff6a6a', '#ffc0c0', '#ffffff'],
+  violet: ['#1b1630', '#3a2f63', '#6150a3', '#9480d8', '#c7b8f5', '#efe9ff', '#ffffff'],
+  stone: ['#1a1412', '#3a2e28', '#5e4c40', '#86705e', '#b09880', '#d8c4a8', '#f0e4d0', '#ffffff', '#ffffff'],
   gold: ['#2a1405', '#5c3008', '#9a5a0e', '#d48e18', '#f5b92c', '#ffde5e', '#fff4bc', '#ffffff'],
   fire: FIRE_RAMP,
   green: ['#0e2a12', '#1e5a28', '#3a8a46', '#6ac078', '#9fe6a0', '#d8ffd8', '#ffffff'],

@@ -1,5 +1,5 @@
 // UI 用のアイコン：武器は骨格キャラから切り抜いた絵、スキルは pixelfx のエフェクトの 1 コマ。
-import { weaponSprite, scrollSprite, gearSprite, bake } from './pix.js';
+import { weaponSprite, scrollSprite, gearSprite, bake, PFX_PAL } from './pix.js';
 import { FX, FIRE_RAMP, EMPTY_ACTOR } from './fxlib.js';
 import { heroPixels, heroPose, COSTUMES } from './hero.js';
 import { SKILLS } from './data.js';
@@ -56,7 +56,13 @@ export function skillIconURL(id, S = 48) {
   const key = 'sk' + id + S;
   if (cache.has(key)) return cache.get(key);
   skTable = skTable || SK();
-  const [mod, o, t, w, h, ox, oy] = skTable[id];
+  let row = skTable[id];
+  if (!row) {
+    const S0 = SKILLS[id], step = (S0.cast || []).find((c) => c.fx);
+    const m = FX[S0.icon || step.fx];
+    row = fx(m, (m.meta.duration || 1) * 0.3, !S0.icon && step.p ? { palette: PFX_PAL[step.p] || (step.p === 'gold' ? GOLD : undefined) } : {});
+  }
+  const [mod, o, t, w, h, ox, oy] = row;
   const url = fit(bake(mod, mod.meta.actor ? { actor: EMPTY_ACTOR, ...o } : o, t, w, h, ox, oy), S * 2, SKILLS[id].color).toDataURL();
   cache.set(key, url);
   return url;

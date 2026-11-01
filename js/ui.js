@@ -1,5 +1,5 @@
-import { RARITY, WEAPONS, SKILLS, AFFIX, ENEMIES, GEAR_SLOTS, STAT_INFO, SETS, FUSE_COST, fuseWeapons, skillPower, xpForLevel } from './data.js';
-import { JOBS, RESET_COST, skillLevels, setCounts, nodeState, allNodes } from './jobs.js';
+import { RARITY, WEAPONS, SKILLS, AFFIX, ENEMIES, GEAR_SLOTS, STAT_INFO, SETS, FUSE_COST, fuseWeapons, skillPower, xpForLevel, affinityOf, affinityLabel, AFFINITY } from './data.js';
+import { JOBS, RESET_COST, skillLevels, setCounts, nodeState, allNodes, locate, classTitle } from './jobs.js';
 import { RIDDLES } from './riddles.js';
 import { mulberry } from './util.js';
 import { itemIcon, skillIconURL, drawPortrait } from './icons.js';
@@ -101,7 +101,7 @@ export class UI {
       else {
         const item = it.L.item;
         const col = RARITY[item.rarity || 0].color;
-        const sub = item.cat === 'weapon' ? `${WEAPONS[item.base].name} · 攻撃 ${item.dmg}` : item.cat === 'gear' ? `防具 · ${GEAR_SLOTS[item.slot].name}${item.set ? ` · ${SETS[item.set].name}セット` : ''}` : 'スキルの巻物';
+        const sub = item.cat === 'skill' ? `スキルの巻物 ${affinityLabel(item.skill, me.job)}` : item.cat === 'weapon' ? `${WEAPONS[item.base].name} · 攻撃 ${item.dmg}` : item.cat === 'gear' ? `防具 · ${GEAR_SLOTS[item.slot].name}${item.set ? ` · ${SETS[item.set].name}セット` : ''}` : 'スキルの巻物';
         pr.innerHTML = `<kbd>F</kbd> 拾う <b style="color:${col}">${esc(item.name)}</b> <small>${sub}</small>`;
       }
     } else {
@@ -296,7 +296,7 @@ export class UI {
     const pct = (v) => `${Math.round(v * 100)}%`;
     const rows = [['HP', `${Math.ceil(me.hp)} / ${me.maxHp}`], ['攻撃力', `×${st.atk.toFixed(2)}`], ['毎秒ダメージ', ws ? ws.dps.toFixed(1) : '-'], ['会心率', ws ? `${ws.crit}%` : pct(st.crit)], ['会心ダメージ', `×${(1.8 + st.critDmg).toFixed(2)}`], ['被ダメージ軽減', pct(st.def)], ['移動速度', pct(st.speed)], ['攻撃速度', `+${pct(st.haste)}`], ['スキル再使用短縮', pct(st.cdr)], ['回復量', pct(st.heal)], ['ダメージ吸収', pct(st.vamp)], ['HP自動回復', `毎秒 ${st.regen}`], ['回避の再使用', `${me.dodgeMax.toFixed(2)} 秒`], ['スキルポイント', me.sp], ['到達階層', `第 ${g.floor} 層`]];
     const eq = Object.keys(GEAR_SLOTS).map((k) => { const it = me.gear[k]; return `<div class="setline">${GEAR_SLOTS[k].name}：${it ? `<span style="color:${RARITY[it.rarity].color}">${esc(it.name)}</span>` : 'なし'}</div>`; }).join('');
-    return `<div class="tabcols c3"><div><canvas id="portrait" width="300" height="320"></canvas><div class="cname"><span style="color:${JOBS[me.job].color}">${esc(me.name)}</span><span id="cLv">Lv ${g.lvl}</span></div><div class="wsub">${JOBS[me.job].name}${me.branch != null ? ` · ${JOBS[me.job].branches[me.branch].name}` : ''}</div></div>
+    return `<div class="tabcols c3"><div><canvas id="portrait" width="300" height="320"></canvas><div class="cname"><span style="color:${JOBS[me.job].color}">${esc(me.name)}</span><span id="cLv">Lv ${g.lvl}</span></div><div class="wsub">${classTitle(me)}</div></div>
       <div><h3>ステータス</h3><dl class="stats">${rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl></div>
       <div><h3>武器</h3>${me.weapon ? `<div class="setline"><span style="color:${RARITY[me.weapon.rarity].color}">${esc(me.weapon.name)}</span></div>` : ''}<h3>防具</h3>${eq}<h3>セット効果</h3>${this.setsHtml(true)}</div></div>`;
   }
@@ -338,18 +338,23 @@ export class UI {
     const g = this.g, me = g.me, lv = skillLevels(me), scrolls = me.inventory.filter((i) => i.cat === 'skill');
     const sel = scrolls.find((x) => x.id === this.sel);
     const slots = me.slots.map((id, i) => `<div class="sks"><kbd>${SK_KEYS[i]}</kbd>${id && lv[id] ? `<img src="${skillIconURL(id, 48)}">${SKILLS[id].name}` : '<div style="height:44px"></div><span class="muted">空き</span>'}</div>`).join('');
-    const list = Object.keys(lv).map((id) => { const S = SKILLS[id], pw = skillPower(id, lv[id], me.stats); return `<div class="skill" style="--col:${S.color}"><img src="${skillIconURL(id, 48)}"><div class="sbody"><div class="sname">${S.name} <span>Lv ${lv[id]}</span></div><div class="sdesc">${S.desc(pw)}</div><div class="muted">再使用 ${pw.cd} 秒${S.aim === 'enemy' ? ' · 近くの敵を自動で狙う' : ''}</div></div><div class="sbtns four">${SK_KEYS.map((k, s) => `<button data-act="assign" data-skill="${id}" data-slot="${s}" class="${me.slots[s] === id ? 'on' : ''}">${k}</button>`).join('')}</div></div>`; }).join('');
+    const list = Object.keys(lv).map((id) => { const S = SKILLS[id], pw = skillPower(id, lv[id], me.stats); return `<div class="skill" style="--col:${S.color}"><img src="${skillIconURL(id, 48)}"><div class="sbody"><div class="sname">${S.name} <span>Lv ${lv[id]}</span> ${this.affTag(id)}</div><div class="sdesc">${S.desc(pw)}</div><div class="muted">再使用 ${pw.cd} 秒${S.aim === 'enemy' ? ' · 近くの敵を自動で狙う' : ''}</div></div><div class="sbtns four">${SK_KEYS.map((k, s) => `<button data-act="assign" data-skill="${id}" data-slot="${s}" class="${me.slots[s] === id ? 'on' : ''}">${k}</button>`).join('')}</div></div>`; }).join('');
     let detail = '';
-    if (sel) { const cur = me.skills[sel.skill] || 0, pw = skillPower(sel.skill, Math.min(5, cur + 1), me.stats); detail = `<div class="panelbox" style="margin-top:12px"><div class="sname">${esc(sel.name)}</div><p class="sdesc">${SKILLS[sel.skill].desc(pw)}</p><div class="acts"><button data-act="use" class="primary" ${cur >= 5 ? 'disabled' : ''}>${cur ? 'レベルを上げる' : '習得する'}</button><button data-act="drop">足元に置く</button></div></div>`; }
-    return `<div class="tabcols c2"><div><h3>セット中</h3><div class="skillslots">${slots}</div><h3>使えるスキル</h3>${list || '<p class="muted small">なし</p>'}</div><div><h3>持っている巻物 <span>${scrolls.length}</span></h3>${this.grid(scrolls)}${detail}<p class="muted small" style="margin-top:12px">巻物はマップで拾えます。ツリー専用のスキルは「スキルツリー」で覚えます。</p></div></div>`;
+    if (sel) { const cur = me.skills[sel.skill] || 0, pw = skillPower(sel.skill, Math.min(5, cur + 1), me.stats); detail = `<div class="panelbox" style="margin-top:12px"><div class="sname">${esc(sel.name)} ${this.affTag(sel.skill)}</div><p class="sdesc">${SKILLS[sel.skill].desc(pw)}</p><div class="acts"><button data-act="use" class="primary" ${cur >= 5 ? 'disabled' : ''}>${cur ? 'レベルを上げる' : '習得する'}</button><button data-act="drop">足元に置く</button></div></div>`; }
+    return `<div class="tabcols c2"><div><h3>セット中</h3><div class="skillslots">${slots}</div><h3>使えるスキル</h3>${list || '<p class="muted small">なし</p>'}</div><div><h3>持っている巻物 <span>${scrolls.length}</span></h3>${this.grid(scrolls)}${detail}<p class="muted small" style="margin-top:12px">巻物はマップで拾えます。ジョブに向いたスキルは効果 +25%、向かないスキルは効果 -50% です。得意：${AFFINITY[me.job].good.map((i) => SKILLS[i].name).join('、')}。不得意：${AFFINITY[me.job].bad.map((i) => SKILLS[i].name).join('、')}。ツリー専用のスキルは「スキルツリー」で覚えます。</p></div></div>`;
   }
 
-  nodeHtml(n, bi) {
-    const me = this.g.me, lv = me.tree[n.id] || 0, st = nodeState(me, n, bi);
+  affTag(id) {
+    const a = affinityOf(id, this.g.me.job);
+    return a ? `<em class="aff ${a > 0 ? 'good' : 'bad'}">${affinityLabel(id, this.g.me.job)}</em>` : '';
+  }
+
+  nodeHtml(n) {
+    const me = this.g.me, lv = me.tree[n.id] || 0, st = nodeState(me, n);
     let name, desc, icon;
     if (n.kind === 'active') {
       const S = SKILLS[n.skill];
-      name = S.name; desc = S.desc(skillPower(n.skill, Math.max(1, Math.min(5, lv + 1)), me.stats));
+      name = S.name; desc = `${S.desc(skillPower(n.skill, Math.max(1, Math.min(5, lv + 1)), me.stats))}（再使用 ${S.cd} 秒）`;
       icon = `<img src="${skillIconURL(n.skill, 48)}">`;
     } else {
       const fmt = Object.entries(n.per).map(([k, v]) => `${STAT_INFO[k][0]} ${STAT_INFO[k][1](v)}`).join('、');
@@ -363,9 +368,10 @@ export class UI {
     const me = this.g.me, J = JOBS[me.job];
     const spent = Object.values(me.tree).reduce((a, b) => a + b, 0);
     const canReset = spent > 0 && me.sp + spent >= RESET_COST;
-    return `<div class="treewrap"><div class="treetop"><div class="sp">スキルポイント ${me.sp}</div><div class="grow muted small">${J.name}のスキルツリー。分岐は 1 つだけ選べます。別の分岐にするにはリセット（${RESET_COST} ポイント消費、残りは返還）。ポイントは強敵・宝箱・ボス・謎解きで手に入ります。</div><button data-act="reset" ${canReset ? '' : 'disabled'}>リセット</button></div>
-      ${this.nodeHtml(J.root, null)}
-      <div class="branches">${J.branches.map((b, i) => `<div class="branch ${me.branch === i ? 'chosen' : me.branch != null ? 'locked' : ''}"><h4>${b.name}</h4><p>${b.desc}</p>${b.nodes.map((n) => this.nodeHtml(n, i)).join('')}</div>`).join('')}</div></div>`;
+    return `<div class="treewrap"><div class="treetop"><div class="sp">スキルポイント ${me.sp}</div><div class="grow muted small">${J.name}のスキルツリー。${J.branches.length} つの大分岐から 1 つ、さらに 2 つの最終ジョブから 1 つを選びます。選び直すにはリセット（${RESET_COST} ポイント消費、残りは返還）。ポイントは強敵・宝箱・ボス・謎解きで手に入ります。</div><button data-act="reset" ${canReset ? '' : 'disabled'}>リセット</button></div>
+      ${this.nodeHtml(J.root)}
+      <div class="branches">${J.branches.map((b, i) => `<div class="branch ${me.branch === i ? 'chosen' : me.branch != null ? 'locked' : ''}"><h4>${b.name}</h4><p>${b.desc}</p>${b.nodes.map((n) => this.nodeHtml(n)).join('')}
+        <div class="subs">${b.subs.map((f, k) => `<div class="branch sub ${me.branch === i && me.sub === k ? 'chosen' : me.branch === i && me.sub != null ? 'locked' : ''}"><h4>${f.name}</h4><p>${f.desc}</p>${f.nodes.map((n) => this.nodeHtml(n)).join('')}</div>`).join('')}</div></div>`).join('')}</div></div>`;
   }
 
   onCharClick(e) {
@@ -405,11 +411,15 @@ export class UI {
   learn(id) {
     const g = this.g, me = g.me, J = JOBS[me.job];
     const n = allNodes(me.job).find((x) => x.id === id);
-    const bi = J.branches.findIndex((b) => b.nodes.includes(n));
-    if (!nodeState(me, n, bi < 0 ? null : bi).ok) return;
+    if (!nodeState(me, n).ok) return;
+    const { bi, si } = locate(me.job, n);
     me.sp--;
     me.tree[id] = (me.tree[id] || 0) + 1;
-    if (bi >= 0) me.branch = bi;
+    if (bi != null) me.branch = bi;
+    if (si != null) {
+      if (me.sub == null) this.toast(`最終ジョブ「${J.branches[bi].subs[si].name}」を選んだ！`, J.color);
+      me.sub = si;
+    }
     if (n.kind === 'active' && !me.slots.includes(n.skill)) { const free = me.slots.indexOf(null); if (free >= 0) me.slots[free] = n.skill; }
     g.refreshStats();
     sfx('level');
@@ -421,7 +431,7 @@ export class UI {
     const spent = Object.values(me.tree).reduce((a, b) => a + b, 0);
     if (spent <= 0 || me.sp + spent < RESET_COST) return;
     me.sp = me.sp + spent - RESET_COST;
-    me.tree = {}; me.branch = null;
+    me.tree = {}; me.branch = null; me.sub = null;
     const lv = skillLevels(me);
     me.slots = me.slots.map((id) => (id && lv[id] ? id : null));
     g.refreshStats();

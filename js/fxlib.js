@@ -70,7 +70,23 @@ import * as iceLance from '../pixelfx/src/fx/ice/ice-lance.js';
 import * as stunned from '../pixelfx/src/fx/status/stunned.js';
 import * as cursed from '../pixelfx/src/fx/status/cursed.js';
 
+import * as heavyCleave from '../pixelfx/src/fx/melee/heavy-cleave.js';
+import * as scytheReap from '../pixelfx/src/fx/melee/scythe-reap.js';
+import * as uppercut from '../pixelfx/src/fx/melee/uppercut.js';
+import * as iceSpikes from '../pixelfx/src/fx/ice/ice-spikes.js';
+import * as blizzardVortex from '../pixelfx/src/fx/ice/blizzard-vortex.js';
+import * as fireRing from '../pixelfx/src/fx/fire/fire-ring.js';
+import * as fireTornado from '../pixelfx/src/fx/fire/fire-tornado.js';
+import * as thunderclap from '../pixelfx/src/fx/lightning/thunderclap.js';
+import * as grenade from '../pixelfx/src/fx/explosions/grenade.js';
+import * as dirtExplosion from '../pixelfx/src/fx/explosions/dirt-explosion.js';
+import * as acidSplash from '../pixelfx/src/fx/nature/acid-splash.js';
+import * as toxicPuddle from '../pixelfx/src/fx/nature/toxic-puddle.js';
+import * as darkExplosion from '../pixelfx/src/fx/shadow/dark-explosion.js';
+import * as featherBurst from '../pixelfx/src/fx/holy/feather-burst.js';
+
 export const FX = {
+  heavyCleave, scytheReap, uppercut, iceSpikes, blizzardVortex, fireRing, fireTornado, thunderclap, grenade, dirtExplosion, acidSplash, toxicPuddle, darkExplosion, featherBurst,
   meteor, flamePillar, lightningStrike, smite, holyPillar, sunburst, healingBloom, poisonCloud, rootSnare, earthSpike, curse, soulDrain,
   daggerFlurry, starFall, parry, iceLance, stunned, cursed,
   brazier, candle, spiritFlame, iceCrystal, exclamation, spellCharge,

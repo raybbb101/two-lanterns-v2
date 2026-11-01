@@ -262,3 +262,17 @@ canvas#game, #titleArt, #portrait { image-rendering: pixelated; }
 .saveRow span.has { color: var(--brass-hi); font-weight: 700; }
 .saveRow button { padding: 3px 8px; font-size: 11px; }
 #jobPick .lv { color: var(--brass-hi); font-size: 10px; min-height: 12px; }
+
+/* 4 分岐のツリー */
+.cpanel { width: min(1240px, 96vw); }
+.subs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.branch.sub { padding: 8px; background: rgba(0, 0, 0, .18); }
+.branch.sub h4 { font-size: 13px; }
+.branch.sub .node { grid-template-columns: 30px 1fr auto; gap: 6px; padding: 6px; }
+.branch.sub .node img, .branch.sub .node .pass { width: 30px; height: 30px; font-size: 9px; }
+.branch.sub .node small { font-size: 10px; }
+.branch.sub .node button { padding: 3px 8px; }
+.aff { font-style: normal; font-size: 10px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+.aff.good { color: #bff0a8; background: rgba(90, 170, 70, .25); }
+.aff.bad { color: #ffb0a0; background: rgba(190, 70, 50, .25); }
+@media (max-width: 900px) { .subs { grid-template-columns: 1fr; } }

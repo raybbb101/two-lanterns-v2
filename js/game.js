@@ -3,13 +3,13 @@ import { T, WH, genMap, moveCircle, isSolid, lineOfSight } from './map.js';
 import { hitsWall } from './map.js';
 import { PixRenderer } from './pix.js';
 import { WEAPONS, SKILLS, SCROLL_POOL, ENEMIES, ENEMY_TYPES, RARITY, skillPower, rollLoot, rollGear, setOfFloor, makeScroll, xpForLevel } from './data.js';
-import { JOBS, startKit, computeStats, skillLevels } from './jobs.js';
+import { JOBS, startKit, computeStats, skillLevels, migrateTree } from './jobs.js';
 import { sfx } from './audio.js';
 import { UI } from './ui.js';
 import { loadSave, writeSave } from './save.js';
 
 const STATES = ['idle', 'chase', 'wind', 'atk', 'rec'];
-const PKINDS = ['arrow', 'bolt', 'fireball', 'eorb', 'rock', 'lance'];
+const PKINDS = ['arrow', 'bolt', 'fireball', 'eorb', 'rock', 'lance', 'bluefire'];
 const SPEED = 178;
 const INV_MAX = 60;
 const SK_KEYS = ['q', 'e', 'r', 'c'];
@@ -51,8 +51,9 @@ export class Game {
     const sv = loadSave(this.me.job);
     this.maxFloor = 1;
     if (sv) {
-      const { weapon, inventory, skills, slots, gear, tree, branch, sp } = sv;
-      Object.assign(this.me, { weapon, inventory, skills, slots, gear, tree, branch, sp });
+      const { weapon, inventory, skills, slots, gear, tree, branch, sub, sp } = sv;
+      Object.assign(this.me, { weapon, inventory, skills, slots, gear, tree, branch, sub: sub ?? null, sp });
+      migrateTree(this.me);
       this.lvl = sv.lvl; this.xp = sv.xp; this.maxFloor = sv.floor;
     }
     this.refreshStats(true);
@@ -87,7 +88,7 @@ export class Game {
       atkT: 9, atkDur: 0.3, atkSeq: 0, atkCd: 0,
       walkPh: 0, moveAmt: 0, lanAng: 0, lanVel: 0, lastVx: 0,
       weapon: null, inventory: [], skills: {}, slots: [null, null, null, null], cds: {},
-      gear: { head: null, body: null, hands: null, feet: null, charm: null }, tree: {}, branch: null, sp: 1, buffs: [],
+      gear: { head: null, body: null, hands: null, feet: null, charm: null }, tree: {}, branch: null, sub: null, sp: 1, buffs: [],
       shield: 0, shieldT: 0, flash: 0, skillAnim: null, skillSeq: 0, revive: 0, dustT: 0,
     };
   }
@@ -136,9 +137,9 @@ export class Game {
 
   saveGame() {
     if (!this.map) return;
-    const { job, name, weapon, inventory, skills, slots, gear, tree, branch, sp } = this.me;
+    const { job, name, weapon, inventory, skills, slots, gear, tree, branch, sub, sp } = this.me;
     this.maxFloor = Math.max(this.maxFloor, this.floor);
-    if (!writeSave({ job, name, weapon, inventory, skills, slots, gear, tree, branch, sp, lvl: this.lvl, xp: this.xp, floor: this.maxFloor }) && !this.saveWarned) {
+    if (!writeSave({ job, name, weapon, inventory, skills, slots, gear, tree, branch, sub, sp, lvl: this.lvl, xp: this.xp, floor: this.maxFloor }) && !this.saveWarned) {
       this.saveWarned = true;
       this.ui.toast('このブラウザでは保存できません（プライベートモードなど）', '#ff8a6a');
     }
@@ -748,7 +749,7 @@ export class Game {
     if (!lvl || me.cds[id] > 0 || me.down) return;
     const pw = skillPower(id, lvl, me.stats);
     const S0 = SKILLS[id];
-    const d = { pid: me.id, id, lvl, x: me.x, y: me.y, aim: me.aim, tx: 0, ty: 0, s: { atk: me.stats.atk, heal: me.stats.heal }, xc: me.stats.crit, cd: me.stats.critDmg, vamp: me.stats.vamp };
+    const d = { pid: me.id, id, lvl, x: me.x, y: me.y, aim: me.aim, tx: 0, ty: 0, s: { atk: me.stats.atk, heal: me.stats.heal, job: me.job }, xc: me.stats.crit, cd: me.stats.critDmg, vamp: me.stats.vamp };
     if (S0.aim === 'enemy') {
       // 近い敵を自動で狙う。いなければマウスの方向へ
       const tgt = this.nearestEnemy(me.x, me.y, 420);
@@ -947,6 +948,56 @@ export class Game {
         if (e) { this.damageEnemy(e, pw.dmg, src, d.aim, { knock: 60 }); this.healPlayer(d.pid, pw.heal); }
         break;
       }
+      default: this.runCast(SKILLS[d.id].cast, d, pw, src, tx, ty); break;
+    }
+  }
+
+  // 手順で書かれたスキル（エフェクトの組み合わせ）を実行する
+  runCast(cast, d, pw, src, tx, ty) {
+    const ca = Math.cos(d.aim), left = ca < 0 ? 1 : 0;
+    const zoneOf = (s) => (s.zone === 'target' ? [tx, ty] : [d.x, d.y]);
+    const hitAll = (list, x, y, opt) => {
+      for (const e of list) {
+        const low = opt.execute && e.hp < e.maxHp * 0.5 ? 2 : 1;
+        this.damageEnemy(e, pw.dmg * low, src, Math.atan2(e.y - y, e.x - x), { knock: 200, ...opt });
+        if (pw.stun) e.stun = pw.stun;
+      }
+    };
+    const run = (s) => {
+      const at = s.at === 'target' || s.aoe === 'target' ? [tx, ty] : [d.x, d.y];
+      if (s.fx) {
+        const o = { n: s.fx, x: Math.round(at[0] + (s.ox || 0)), y: Math.round(at[1] + (s.dy || 0)) };
+        if (s.p) o.p = s.p;
+        if (s.f) o.f = left;
+        if (s.ground) o.ground = 1;
+        if (s.life) o.life = s.life === 'dur' ? pw.dur : s.life;
+        this.fx('pfx', o);
+      } else if (s.snd) this.fx('snd', { n: s.snd, x: Math.round(d.x), y: Math.round(d.y) });
+      else if (s.shake) this.fx('shake', { a: s.shake });
+      else if (s.aoe) hitAll(this.enemies.filter((e) => dist(e.x, e.y, at[0], at[1]) < s.r + e.r), at[0], at[1], s.opt || {});
+      else if (s.cone) hitAll(this.enemies.filter((e) => dist(e.x, e.y, d.x, d.y) < s.r + e.r && Math.abs(angDiff(d.aim, Math.atan2(e.y - d.y, e.x - d.x))) < s.cone), d.x, d.y, s.opt || {});
+      else if (s.zone) { const [x, y] = zoneOf(s); this.addZone({ x, y, r: s.r, dur: pw.dur, dps: pw.dot, hps: pw.hot, slow: s.slow, src, vis: s.vis || 'none' }); }
+      else if (s.heal) { for (const p of [this.me, this.ally]) if (p && !p.down && dist(p.x, p.y, d.x, d.y) < s.heal) this.healPlayer(p.id, pw.heal); }
+      else if (s.healSelf) this.healPlayer(d.pid, pw.heal);
+      else if (s.shield) { for (const p of [this.me, this.ally]) if (p && !p.down && dist(p.x, p.y, d.x, d.y) < s.shield) { if (p === this.me) this.wardLocal(pw.shield, pw.dur); else this.net.send({ t: 'ward', a: pw.shield, d: pw.dur }); } }
+      else if (s.buff) {
+        const b = {};
+        for (const [k, v] of Object.entries(s.buff)) b[k] = pw[v] / 100;
+        if (s.self) this.buffPlayer(d.pid, b, pw.dur);
+        else for (const p of [this.me, this.ally]) if (p && !p.down && dist(p.x, p.y, d.x, d.y) < s.r) this.buffPlayer(p.id, b, pw.dur);
+      } else if (s.multi) {
+        for (let i = 0; i < pw.hits; i++) this.delayed.push({ t: 0.1 + i * s.multi, fn: () => { const e = this.nearestEnemy(tx, ty, s.r); if (e) hitAll([e], tx, ty, s.opt || {}); } });
+      } else if (s.proj) {
+        const q = s.proj, n = pw.n || 1;
+        for (let i = 0; i < n; i++) {
+          const a = d.aim + (q.fan ? (i - (n - 1) / 2) * q.fan : 0);
+          this.projs.push({ id: this.nextId++, kind: q.kind, x: d.x + Math.cos(a) * 16, y: d.y + Math.sin(a) * 16, vx: Math.cos(a) * q.sp, vy: Math.sin(a) * q.sp, owner: d.pid, dmg: pw.dmg, src, life: q.life, r: q.r, rar: q.rar, pierce: q.pierce ? new Set() : undefined });
+        }
+      }
+    };
+    for (const s of cast) {
+      if (s.delay) this.delayed.push({ t: s.delay, fn: () => run(s) });
+      else run(s);
     }
   }
 
@@ -1364,15 +1415,15 @@ export class Game {
               if (!p.pierce.has(e.id)) { p.pierce.add(e.id); this.damageEnemy(e, p.dmg, p.src, Math.atan2(p.vy, p.vx)); }
               continue;
             }
-            if (p.kind !== 'fireball') this.damageEnemy(e, p.dmg, p.src, Math.atan2(p.vy, p.vx), p.slow ? { slow: p.slow } : {});
+            if (p.kind !== 'fireball' && p.kind !== 'bluefire') this.damageEnemy(e, p.dmg, p.src, Math.atan2(p.vy, p.vx), p.slow ? { slow: p.slow } : {});
             dead = true;
             break;
           }
         }
       }
       if (dead) {
-        if (p.kind === 'fireball') {
-          this.fx('boom', { x: Math.round(p.x), y: Math.round(p.y) });
+        if (p.kind === 'fireball' || p.kind === 'bluefire') {
+          this.fx('boom', { x: Math.round(p.x), y: Math.round(p.y), p: p.kind === 'bluefire' ? 'blue' : undefined });
           for (const e of [...this.enemies]) if (dist(e.x, e.y, p.x, p.y) < 84 + e.r) this.damageEnemy(e, p.dmg, p.src, Math.atan2(e.y - p.y, e.x - p.x), { knock: 260, burn: true });
         } else this.fx('poof', { x: Math.round(p.x), y: Math.round(p.y), k: PKINDS.indexOf(p.kind) });
       } else keep.push(p);
