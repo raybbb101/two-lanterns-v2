@@ -51,7 +51,28 @@ import * as iceCrystal from '../pixelfx/src/fx/ice/ice-crystal.js';
 import * as exclamation from '../pixelfx/src/fx/ui/exclamation.js';
 import * as spellCharge from '../pixelfx/src/fx/arcane/spell-charge.js';
 
+import * as meteor from '../pixelfx/src/fx/fire/meteor.js';
+import * as flamePillar from '../pixelfx/src/fx/fire/flame-pillar.js';
+import * as lightningStrike from '../pixelfx/src/fx/lightning/lightning-strike.js';
+import * as smite from '../pixelfx/src/fx/holy/smite.js';
+import * as holyPillar from '../pixelfx/src/fx/holy/holy-pillar.js';
+import * as sunburst from '../pixelfx/src/fx/holy/sunburst.js';
+import * as healingBloom from '../pixelfx/src/fx/nature/healing-bloom.js';
+import * as poisonCloud from '../pixelfx/src/fx/nature/poison-cloud.js';
+import * as rootSnare from '../pixelfx/src/fx/nature/root-snare.js';
+import * as earthSpike from '../pixelfx/src/fx/nature/earth-spike.js';
+import * as curse from '../pixelfx/src/fx/shadow/curse.js';
+import * as soulDrain from '../pixelfx/src/fx/shadow/soul-drain.js';
+import * as daggerFlurry from '../pixelfx/src/fx/melee/dagger-flurry.js';
+import * as starFall from '../pixelfx/src/fx/arcane/star-fall.js';
+import * as parry from '../pixelfx/src/fx/impacts/parry.js';
+import * as iceLance from '../pixelfx/src/fx/ice/ice-lance.js';
+import * as stunned from '../pixelfx/src/fx/status/stunned.js';
+import * as cursed from '../pixelfx/src/fx/status/cursed.js';
+
 export const FX = {
+  meteor, flamePillar, lightningStrike, smite, holyPillar, sunburst, healingBloom, poisonCloud, rootSnare, earthSpike, curse, soulDrain,
+  daggerFlurry, starFall, parry, iceLance, stunned, cursed,
   brazier, candle, spiritFlame, iceCrystal, exclamation, spellCharge,
   swordSlash, doubleSlash, hammerSmash, thrust, spinSlash, clawSwipe, hitSpark, critHit, hitFlash, groundSlam, heavyLanding, shieldBlock,
   arrow, plasmaShot, fireball, smallExplosion, torch, frostNova, healAoe, heal, divineShield, resurrection, zapHit, blinkOut, blinkIn,
@@ -67,7 +88,24 @@ export const RARE_RAMP = [
   ['#212f6b', '#2c58aa', '#3a8bd8', '#62c8f4', '#b8c9e8', '#e8f1ff', '#ffffff'],
   ['#2a1450', '#4a2286', '#7a3ac0', '#a868f0', '#d0a8ff', '#f0e0ff', '#ffffff'],
   ['#4a1712', '#9a4a0e', '#d48e18', '#f5b92c', '#ffde5e', '#fff4bc', '#ffffff'],
+  ['#3a0a1e', '#7a1438', '#c02850', '#f05a78', '#ff9ab0', '#ffe0e8', '#ffffff'],
 ];
+// 人形を描かせないための空の体（status 系の位置はふつうの身長に合わせる）
+export const EMPTY_ACTOR = { mask: { w: 24, h: 38, data: new Uint8Array(24 * 38) }, pixels: new Uint32Array(24 * 38), x: -12, y: -38, w: 24, h: 38, k: 2, head: [0, -38], chest: [0, -26], eyes: [] };
+/** スプライトのピクセルから、エフェクトに渡す「体」を作る（余白は切り落とす） */
+export function actorFrom(o) {
+  let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+  for (let y = 0; y < o.h; y++) for (let x = 0; x < o.w; x++) if (o.rgba[(y * o.w + x) * 4 + 3]) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  const w = x1 - x0 + 1, h = y1 - y0 + 1, data = new Uint8Array(w * h), pixels = new Uint32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const j = ((y + y0) * o.w + x + x0) * 4;
+    if (!o.rgba[j + 3]) continue;
+    data[y * w + x] = 1;
+    pixels[y * w + x] = ((255 << 24) | (o.rgba[j + 2] << 16) | (o.rgba[j + 1] << 8) | o.rgba[j]) >>> 0;
+  }
+  const ax = o.ox + x0, ay = o.oy + y0;
+  return { mask: { w, h, data }, pixels, x: ax, y: ay, w, h, k: 2, head: [ax + (w >> 1), ay], chest: [ax + (w >> 1), ay + Math.round(h * 0.32)], eyes: [] };
+}
 export const FIRE_RAMP = ['#4a1712', '#8a1f17', '#c9281f', '#f2561d', '#ff8a2a', '#ffc23d', '#ffe26b', '#fff3a6', '#ffffff'];
 export const ICE_RAMP = ['#151a3d', '#212f6b', '#2c58aa', '#3a8bd8', '#62c8f4', '#a6ecff', '#dcfbff', '#ffffff'];
 
@@ -90,6 +128,7 @@ export class FxLayer {
   /** エフェクトを置く。o.follow: () => {x, y} で毎フレーム追従。o.life: 秒で強制終了（ループ用）。 */
   add(mod, o = {}) {
     for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
+    if (mod.meta.actor && !o.actor) o.actor = EMPTY_ACTOR;
     const fx = createFx(mod, { seed: seedN++ % 997, ...o });
     fx.follow = o.follow || null;
     fx.life = o.life ?? Infinity;

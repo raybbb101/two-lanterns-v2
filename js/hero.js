@@ -44,24 +44,48 @@ function restMap() {
 }
 
 const ramp = (...h) => h.map(C);
-export const COSTUMES = [
-  {
+export const COSTUMES = {
+  knight: {
     hair: ramp('#e0864a', '#b4532c', '#86361f', '#5a2216'), skin: ramp('#ffd9b8', '#f0b48a', '#d08a66', '#a8644a'),
     tunic: ramp('#e4584a', '#b8343a', '#86202e', '#5a1424'), skirt: ramp('#b8343a', '#86202e', '#5a1424', '#3e0e1c'),
     sleeve: ramp('#d0484a', '#a02c36', '#741c2a', '#4e1220'), bracer: ramp('#a0683c', '#7a4a2a', '#56321e', '#3a2014'),
     glove: ramp('#8a5a36', '#6a4026', '#4a2a1a', '#2e1a10'), belt: ramp('#e8c060', '#a87a30', '#6a4a20', '#4a3014'),
     pants: ramp('#5a5270', '#433d58', '#302b42', '#211d2e'), boots: ramp('#8a5634', '#643c22', '#462818', '#2e1a10'),
-    eye: C('#1c1830'), eyeLow: C('#3a5aa0'), cape: ramp('#c23a3e', '#8a2430', '#5e1626', '#3c0c1a'), name: '#ff8a6a',
+    eye: C('#1c1830'),
   },
-  {
+  ranger: {
     hair: ramp('#ffffff', '#d6dcf0', '#a4abc8', '#747a9a'), skin: ramp('#ffe4cc', '#f2c4a2', '#d49c7a', '#aa7258'),
     tunic: ramp('#5ad0c0', '#2f9a92', '#1e6a6a', '#124646'), skirt: ramp('#2f9a92', '#1e6a6a', '#124646', '#0a2e30'),
     sleeve: ramp('#48bcb0', '#28888a', '#1a5c5e', '#103c40'), bracer: ramp('#6a7a8a', '#4c5a6a', '#34404c', '#222a34'),
     glove: ramp('#5a6070', '#404554', '#2c303c', '#1c1f28'), belt: ramp('#e8e0c8', '#a89c78', '#6a6250', '#443e32'),
     pants: ramp('#4a4e66', '#363a4e', '#262938', '#191b26'), boots: ramp('#5a4a6a', '#3e3250', '#2a2238', '#1a1424'),
-    eye: C('#2a1838'), eyeLow: C('#8a4ac0'), cape: ramp('#3aa8a0', '#21706e', '#144a4c', '#0a2e30'), name: '#7fe0d6',
+    eye: C('#2a1838'),
   },
-];
+  mage: {
+    hair: ramp('#5a4aa8', '#3e3080', '#2a2058', '#1a1438'), skin: ramp('#ffe0d0', '#f0bca8', '#cc9480', '#9a6a5c'),
+    tunic: ramp('#a878e8', '#7a4cc0', '#54308c', '#361c5e'), skirt: ramp('#7a4cc0', '#54308c', '#361c5e', '#22103e'),
+    sleeve: ramp('#9a68dc', '#6e42b0', '#4c2a80', '#301a54'), bracer: ramp('#e8c868', '#b08c38', '#786024', '#4e3c16'),
+    glove: ramp('#54308c', '#3c2068', '#281448', '#180c2e'), belt: ramp('#f0d070', '#b89030', '#7a5e20', '#4e3a14'),
+    pants: ramp('#3e3660', '#2c2648', '#1e1a32', '#141022'), boots: ramp('#4a3a70', '#342850', '#221a38', '#150f24'),
+    eye: C('#2a1040'),
+  },
+  healer: {
+    hair: ramp('#fff0b0', '#ecc870', '#c49a44', '#8a6a2c'), skin: ramp('#ffe8d4', '#f6ccac', '#d6a484', '#ae7c60'),
+    tunic: ramp('#ffffff', '#e8e4d8', '#bcb6a4', '#8a8474'), skirt: ramp('#e8e4d8', '#bcb6a4', '#8a8474', '#5e5a4e'),
+    sleeve: ramp('#f4f0e4', '#d0caba', '#a49e8e', '#767264'), bracer: ramp('#ffe08a', '#d8a844', '#9a742a', '#64481a'),
+    glove: ramp('#f0e4c8', '#c8b894', '#94866a', '#645a46'), belt: ramp('#ffd870', '#d0a038', '#946e22', '#5e4414'),
+    pants: ramp('#c8c2b0', '#9a9484', '#6e6a5c', '#4a463c'), boots: ramp('#c49a60', '#946e40', '#684a28', '#442e18'),
+    eye: C('#1e3a5a'),
+  },
+  rogue: {
+    hair: ramp('#4a4658', '#34303e', '#22202a', '#15131a'), skin: ramp('#f0d0b8', '#d8ac90', '#b0846c', '#80604c'),
+    tunic: ramp('#5a5270', '#3e3854', '#2a263c', '#1a1828'), skirt: ramp('#3e3854', '#2a263c', '#1a1828', '#100e1a'),
+    sleeve: ramp('#4e4664', '#363048', '#242034', '#161422'), bracer: ramp('#8a70c8', '#6450a0', '#443670', '#2a2048'),
+    glove: ramp('#3a3448', '#282434', '#1a1822', '#100e16'), belt: ramp('#b090f0', '#8066c0', '#584488', '#382a5a'),
+    pants: ramp('#3a3648', '#282534', '#1a1824', '#100f18'), boots: ramp('#3e384e', '#2a2636', '#1a1824', '#100f18'),
+    eye: C('#a080ff'),
+  },
+};
 
 // 武器の金属をレアリティの色に
 const STEEL = { hi: C('#ffffff'), a: C('#e8edf6'), b: C('#a4afc6'), d: C('#68748f') };
@@ -71,6 +95,7 @@ const RARE_TINT = [
   ramp('#f0f8ff', '#b8dcff', '#5fa0f0', '#3a62b0'),
   ramp('#fff0ff', '#e4c0ff', '#b07ae8', '#6a40a8'),
   ramp('#fffbe8', '#ffe6a0', '#f0b040', '#a86a20'),
+  ramp('#fff0f4', '#ffb0c4', '#f05a78', '#a02848'),
 ];
 
 export const RIG_WEAPON = { sword: 'sword', dagger: 'dagger', axe: 'hammer', spear: 'spear', bow: 'bow', staff: 'staff' };
@@ -192,7 +217,10 @@ export function heroPose(h, t) {
     yaw += k * Math.PI * 2;
   } else if (h.atkDur && h.atkT < h.atkDur) {
     const k = h.weapon ? attackKind(h.weapon.base) : 'sword';
-    pose = attackPose(k, S, h.atkT / h.atkDur, h.atkSeq % 2);
+    pose = { ...attackPose(k, S, h.atkT / h.atkDur, h.atkSeq % 2) };
+    // 上下を狙っているときは武器もそちらへ向ける
+    const up = Math.atan2(Math.sin(h.aim), Math.abs(Math.cos(h.aim)));
+    if (k !== 'hammer') { pose.sa = (pose.sa || 0) + up * 0.85; pose.fy = (pose.fy || -20) + Math.sin(up) * 11; pose.fx = (pose.fx || 10) - Math.abs(Math.sin(up)) * 5; }
   } else if (h.skillAnim && h.skillAnim.t < 0.35) {
     const RAISE = { ...S, crouch: 3, lean: -2, fx: 4, fy: -36, bx: -4, by: -34, turn: 1 };
     pose = RAISE;

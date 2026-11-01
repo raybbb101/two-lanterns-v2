@@ -1,6 +1,6 @@
 // UI 用のアイコン：武器は骨格キャラから切り抜いた絵、スキルは pixelfx のエフェクトの 1 コマ。
-import { weaponSprite, scrollSprite, bake } from './pix.js';
-import { FX, FIRE_RAMP } from './fxlib.js';
+import { weaponSprite, scrollSprite, gearSprite, bake } from './pix.js';
+import { FX, FIRE_RAMP, EMPTY_ACTOR } from './fxlib.js';
 import { heroPixels, heroPose, COSTUMES } from './hero.js';
 import { SKILLS } from './data.js';
 import { rgba } from './util.js';
@@ -24,10 +24,11 @@ function fit(src, S, bg) {
 
 const cache = new Map();
 export function itemIcon(it, S = 56) {
-  const key = (it.cat === 'weapon' ? it.base + it.rarity : 'scroll' + it.skill) + S;
+  const key = (it.cat === 'weapon' ? it.base + it.rarity : it.cat === 'gear' ? it.slot + it.rarity : 'scroll' + it.skill) + S;
   if (cache.has(key)) return cache.get(key);
   let c;
   if (it.cat === 'weapon') c = fit(weaponSprite(it.base, it.rarity), S * 2);
+  else if (it.cat === 'gear') c = fit(gearSprite(it.slot, it.rarity), S * 2);
   else {
     const sc = scrollSprite(), tmp = mk(sc.width + 6, sc.height + 6), t = tmp.getContext('2d');
     t.drawImage(sc, 3, 3);
@@ -39,20 +40,24 @@ export function itemIcon(it, S = 56) {
   return url;
 }
 
-const SK = {
-  fireball: [FX.fireball, {}, 0.4, 136, 56, 112, 28],
-  whirl: [FX.spinSlash, {}, 0.12, 208, 104, 104, 84],
-  dash: [FX.blinkOut, { palette: ['#062a26', '#0e5a52', '#1a8a7a', '#3ac0a8', '#7fe8d6', '#c8fff4', '#ffffff'] }, 0.18, 136, 96, 68, 80],
-  heal: [FX.heal, {}, 0.7, 80, 104, 40, 92],
-  nova: [FX.frostNova, {}, 0.55, 288, 192, 144, 150],
-  chain: [FX.zapHit, {}, 0.08, 144, 112, 72, 80],
-  ward: [FX.divineShield, { palette: ['#0e2a12', '#1e5a28', '#3a8a46', '#6ac078', '#9fe6a0', '#d8ffd8', '#ffffff'] }, 0.6, 88, 84, 44, 68],
-};
+const GOLD = ['#2a1405', '#5c3008', '#9a5a0e', '#d48e18', '#f5b92c', '#ffde5e', '#fff4bc', '#ffffff'];
+const fx = (m, t, o = {}) => [m, o, t, m.meta.size[0], m.meta.size[1], m.meta.origin[0], m.meta.origin[1]];
+const SK = () => ({
+  fireball: fx(FX.fireball, 0.4), whirl: fx(FX.spinSlash, 0.12), dash: fx(FX.blinkOut, 0.18, { palette: ['#062a26', '#0e5a52', '#1a8a7a', '#3ac0a8', '#7fe8d6', '#c8fff4', '#ffffff'] }),
+  heal: fx(FX.heal, 0.7), nova: fx(FX.frostNova, 0.55), chain: fx(FX.zapHit, 0.08), ward: fx(FX.divineShield, 0.6, { palette: ['#0e2a12', '#1e5a28', '#3a8a46', '#6ac078', '#9fe6a0', '#d8ffd8', '#ffffff'] }),
+  bash: fx(FX.parry, 0.08), warcry: fx(FX.sunburst, 0.4, { palette: FIRE_RAMP }), quake: fx(FX.earthSpike, 0.6), roar: fx(FX.rage, 0.3),
+  pierce: fx(FX.arrow, 0.2), focus: fx(FX.sunburst, 0.4, { palette: GOLD }), thorns: fx(FX.rootSnare, 1), rain: fx(FX.starFall, 0.7, { palette: GOLD }), snare: fx(FX.rootSnare, 1.4),
+  pillar: fx(FX.flamePillar, 1.2), meteor: fx(FX.meteor, 0.4), lance: fx(FX.iceLance, 0.3), strike: fx(FX.lightningStrike, 0.8),
+  bloom: fx(FX.healingBloom, 1.3), bless: fx(FX.blessing || FX.heal, 0.8), miracle: fx(FX.resurrection, 1.2), smite: fx(FX.smite, 0.58), hpillar: fx(FX.holyPillar, 1),
+  flurry: fx(FX.daggerFlurry, 0.3), shadowstep: fx(FX.blinkIn, 0.3), poison: fx(FX.poisonCloud, 1), curse: fx(FX.curse, 1), drain: fx(FX.soulDrain, 1),
+});
+let skTable = null;
 export function skillIconURL(id, S = 48) {
   const key = 'sk' + id + S;
   if (cache.has(key)) return cache.get(key);
-  const [mod, o, t, w, h, ox, oy] = SK[id];
-  const url = fit(bake(mod, o, t, w, h, ox, oy), S * 2, SKILLS[id].color).toDataURL();
+  skTable = skTable || SK();
+  const [mod, o, t, w, h, ox, oy] = skTable[id];
+  const url = fit(bake(mod, mod.meta.actor ? { actor: EMPTY_ACTOR, ...o } : o, t, w, h, ox, oy), S * 2, SKILLS[id].color).toDataURL();
   cache.set(key, url);
   return url;
 }
@@ -61,8 +66,7 @@ export function skillIconURL(id, S = 48) {
 export function drawPortrait(c, me, t, k = 5, cx, footY) {
   const h = { ...me, aim: me.portraitAim ?? 0.25, moveAmt: 0, atkT: 9, atkDur: 0.3, dodgeT: 0, down: false, skillAnim: null };
   const pose = heroPose(h, t);
-  const ci = me.id === 1 ? 1 : 0;
-  const o = heroPixels(pose, COSTUMES[ci], me.weapon ? me.weapon.rarity : 0);
+  const o = heroPixels(pose, COSTUMES[me.job || 'knight'], me.weapon ? me.weapon.rarity : 0);
   const tmp = mk(o.w, o.h);
   tmp.getContext('2d').putImageData(new ImageData(o.rgba, o.w, o.h), 0, 0);
   c.imageSmoothingEnabled = false;

@@ -22,6 +22,7 @@
     <h1><span class="jp">ふたつの灯</span><span class="en">TWO LANTERNS · V2</span></h1>
     <p class="lead">灯りを掲げ、ふたりで地下迷宮の底へ。</p>
     <label class="field"><span>名前</span><input id="nameInput" maxlength="10" placeholder="旅人" autocomplete="off"></label>
+    <div class="field"><span>ジョブ（あとから変更できません）</span><div id="jobPick"></div><small id="jobDesc"></small></div>
     <div class="row">
       <button id="btnHost" class="primary">ルームを作る</button>
       <button id="btnSolo">ひとりで遊ぶ</button>
@@ -32,7 +33,7 @@
       <button id="btnJoin">参加する</button>
     </div>
     <p id="titleStatus"></p>
-    <p class="keys"><kbd>WASD</kbd> 移動　<kbd>左クリック</kbd> 攻撃　<kbd>Space</kbd> 回避　<kbd>Q</kbd><kbd>E</kbd> スキル　<kbd>F</kbd> 拾う　<kbd>Tab</kbd> キャラクター</p>
+    <p class="keys"><kbd>WASD</kbd> 移動　<kbd>左クリック</kbd> 攻撃　<kbd>Space</kbd> 回避　<kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd><kbd>C</kbd> スキル　<kbd>F</kbd> 拾う　<kbd>Tab</kbd> キャラクター</p>
   </div>
 </section>
 
@@ -66,6 +67,8 @@
       <div class="slot" id="slotW"><img class="hidden"><span class="cdnum"></span><kbd>左</kbd></div>
       <div class="slot" id="slotQ"><img class="hidden"><span class="cdnum"></span><kbd>Q</kbd></div>
       <div class="slot" id="slotE"><img class="hidden"><span class="cdnum"></span><kbd>E</kbd></div>
+      <div class="slot" id="slotR"><img class="hidden"><span class="cdnum"></span><kbd>R</kbd></div>
+      <div class="slot" id="slotC"><img class="hidden"><span class="cdnum"></span><kbd>C</kbd></div>
       <div class="slot dodge" id="slotD"><img class="hidden"><svg viewBox="0 0 24 24"><path d="M4 16c4-1 6-4 7-8M9 18c4-1 7-4 8-9M15 19c3-1 5-3 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="cdnum"></span><kbd>Space</kbd></div>
     </div>
   </div>
@@ -80,26 +83,29 @@
 <!-- キャラクター画面 -->
 <section id="charScreen" class="hidden">
   <div class="cpanel">
-    <header><h2>キャラクター</h2><p>ゲームは止まりません。安全な場所で開こう。</p><button id="charClose">閉じる <kbd>Tab</kbd></button></header>
-    <div class="cols">
-      <div class="col me">
-        <canvas id="portrait" width="300" height="320"></canvas>
-        <div class="cname"><span id="cName"></span><span id="cLv"></span></div>
-        <dl class="stats" id="cStats"></dl>
-        <h3>装備中の武器</h3>
-        <div id="equipped"></div>
-      </div>
-      <div class="col inv">
-        <h3>持ち物 <span id="invCount"></span></h3>
-        <div id="invGrid"></div>
-        <div id="detail"></div>
-      </div>
-      <div class="col sk">
-        <h3>スキル</h3>
-        <p class="muted small">ボタンで <kbd>Q</kbd> / <kbd>E</kbd> にセット。巻物を重ねるとレベルが上がる（最大 5）。</p>
-        <div id="skillList"></div>
-      </div>
-    </div>
+    <header>
+      <h2>キャラクター</h2>
+      <nav id="charTabs">
+        <button data-tab="status">ステータス</button>
+        <button data-tab="weapon">武器・合成</button>
+        <button data-tab="gear">防具</button>
+        <button data-tab="skill">スキル</button>
+        <button data-tab="tree">スキルツリー</button>
+      </nav>
+      <button id="charClose">閉じる <kbd>Tab</kbd></button>
+    </header>
+    <p id="charNote"></p>
+    <div id="charBody"></div>
+  </div>
+</section>
+
+<section id="riddle" class="hidden">
+  <div class="hpanel">
+    <h2 id="riddleTitle">石碑のなぞなぞ</h2>
+    <p id="riddleQ"></p>
+    <div id="riddleChoices"></div>
+    <p class="muted small" id="riddleNote"></p>
+    <button id="riddleClose">あとで</button>
   </div>
 </section>
 
@@ -110,14 +116,15 @@
       <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動　・　マウスで狙う</li>
       <li><kbd>左クリック</kbd>（長押しで連続）攻撃</li>
       <li><kbd>Space</kbd> / <kbd>右クリック</kbd> 回避（回避中は無敵）</li>
-      <li><kbd>Q</kbd> <kbd>E</kbd> スキル</li>
+      <li><kbd>Q</kbd> <kbd>E</kbd> <kbd>R</kbd> <kbd>C</kbd> スキル（近くの敵を自動で狙います）</li>
       <li><kbd>F</kbd> 武器や巻物を拾う・宝箱を開ける</li>
-      <li><kbd>Tab</kbd> キャラクター画面（装備・スキル習得）</li>
+      <li><kbd>Tab</kbd> キャラクター画面（武器の合成・防具・スキルツリー）。一人のときは開いている間ゲームが止まります</li>
       <li><kbd>M</kbd> 音のオン／オフ</li>
     </ul>
     <p>フロアの魔物をすべて倒すと <b>転移陣</b> が開きます。二人で乗ると次の層へ。3 層ごとに番人が待っています。</p>
     <p>倒れても、相方がそばに立てば復活できます。二人とも倒れるとフロアの最初から。</p>
     <p>赤い床の模様は敵の攻撃の予兆。回避で抜けよう。</p>
+    <p>石碑のなぞなぞや光る台座を見つけたら解いてみよう。報酬がもらえます。</p>
     <button id="helpClose">閉じる</button>
   </div>
 </section>

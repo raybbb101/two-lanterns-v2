@@ -109,7 +109,23 @@ export function genMap(seed, floor) {
     }
   }
 
-  return { W, H, g, rooms, start, end, torches, chests, spawns, seed, floor, boss, theme: themeFor(floor), seen: new Uint8Array(W * H) };
+  // なぞなぞ（石碑）と灯の台座
+  const puzzles = [];
+  const pz = rooms.filter((r) => r !== start && !r.arena && r.w >= 8 && r.h >= 6);
+  const npz = Math.min(pz.length, 1 + (R() < 0.5 ? 1 : 0));
+  for (let i = 0; i < npz; i++) {
+    const r = pz.splice(Math.floor(R() * pz.length), 1)[0];
+    const y = r.y + r.h - 2;
+    const cell = (x) => ({ x: (x + 0.5) * T, y: (y + 0.5) * T });
+    if (R() < 0.5) puzzles.push({ id: i, kind: 'riddle', ...cell(r.cx), ri: Math.floor(R() * 100000), done: false });
+    else {
+      const order = [0, 1, 2];
+      for (let k = 2; k > 0; k--) { const j = Math.floor(R() * (k + 1)); [order[k], order[j]] = [order[j], order[k]]; }
+      puzzles.push({ id: i, kind: 'plates', ...cell(r.cx), plates: [cell(r.x + 2), cell(r.x + r.w - 3), cell(r.cx)], seq: order, step: 0, hold: 0, lit: [], done: false });
+    }
+  }
+
+  return { W, H, g, rooms, start, end, torches, chests, spawns, puzzles, seed, floor, boss, theme: themeFor(floor), seen: new Uint8Array(W * H) };
 }
 
 export const isSolid = (m, tx, ty) => tx < 0 || ty < 0 || tx >= m.W || ty >= m.H || m.g[ty * m.W + tx] === 0;

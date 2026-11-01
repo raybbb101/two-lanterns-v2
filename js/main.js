@@ -3,6 +3,7 @@ import { Net } from './net.js';
 import { initAudio } from './audio.js';
 import { drawPortrait } from './icons.js';
 import { makeWeapon } from './data.js';
+import { JOBS, JOB_KEYS } from './jobs.js';
 import { rand, TAU } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -25,7 +26,7 @@ const busy = (on) => document.querySelectorAll('#title button').forEach((b) => (
 
 function start(mode, net, code) {
   titleRun = false;
-  game = new Game($('game'), { mode, net, code, name: playerName(), onExit: exitToTitle });
+  game = new Game($('game'), { mode, net, code, name: playerName(), job: selJob, onExit: exitToTitle });
   window.__game = game;
 }
 
@@ -60,16 +61,33 @@ $('codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(
 $('codeInput').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
 
 // URL に ?room=XXXXX があれば入力しておく
+// ジョブの選択
+let selJob = JOB_KEYS.includes(store.get('ftn-job')) ? store.get('ftn-job') : 'knight';
+const pickJob = (j) => {
+  selJob = j;
+  store.set('ftn-job', j);
+  document.querySelectorAll('#jobPick button').forEach((b) => b.classList.toggle('on', b.dataset.job === j));
+  $('jobDesc').textContent = JOBS[j].desc;
+  if (heroes) { heroes[0].job = j; heroes[0].weapon = makeWeapon(JOBS[j].weapon, 2, 1); }
+};
+let heroes = null;
 const qp = new URLSearchParams(location.search).get('room');
 if (qp) $('codeInput').value = qp.toUpperCase();
 
 // ---------- タイトルの一枚絵 ----------
 const tc = $('titleArt');
 const tcx = tc.getContext('2d');
-const heroes = [
-  { id: 0, weapon: makeWeapon('sword', 2, 1), portraitAim: 0.3 },
-  { id: 1, weapon: makeWeapon('bow', 3, 1), portraitAim: Math.PI - 0.3 },
+heroes = [
+  { job: selJob, weapon: makeWeapon(JOBS[selJob].weapon, 2, 1), portraitAim: 0.3 },
+  { job: selJob === 'ranger' ? 'knight' : 'ranger', weapon: makeWeapon(selJob === 'ranger' ? 'sword' : 'bow', 3, 1), portraitAim: Math.PI - 0.3 },
 ];
+$('jobPick').innerHTML = JOB_KEYS.map((j) => `<button type="button" data-job="${j}"><canvas width="40" height="44"></canvas>${JOBS[j].name}</button>`).join('');
+document.querySelectorAll('#jobPick button').forEach((b) => {
+  const j = b.dataset.job;
+  drawPortrait(b.querySelector('canvas').getContext('2d'), { job: j, weapon: null }, 0, 1, 20, 42);
+  b.onclick = () => pickJob(j);
+});
+pickJob(selJob);
 const embers = Array.from({ length: 50 }, () => ({ x: rand(), y: rand(), s: rand(0.5, 1.6), v: rand(0.02, 0.06), p: rand(TAU) }));
 const glow = (c, x, y, r, col, a) => {
   const g = c.createRadialGradient(x, y, 0, x, y, r);

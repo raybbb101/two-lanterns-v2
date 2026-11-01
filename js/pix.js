@@ -4,7 +4,7 @@ import { T, WH } from './map.js';
 import { K, TP, WHP, buildPixelMap } from './tiles.js';
 import { heroPixels, heroPose, poseKey, COSTUMES } from './hero.js';
 import { monsterPixels } from './monsters.js';
-import { FxLayer, FX, RARE_RAMP, FIRE_RAMP, ICE_RAMP } from './fxlib.js';
+import { FxLayer, FX, RARE_RAMP, FIRE_RAMP, ICE_RAMP, EMPTY_ACTOR, actorFrom } from './fxlib.js';
 import { createFx, createFrame, composite, hex } from '../pixelfx/src/core/index.js';
 const BOLT_W = hex('#ffffff'), BOLT_C = hex('#a890ff');
 import { skeleton } from '../pixelfx/src/core/rig.js';
@@ -56,8 +56,8 @@ export function weaponSprite(base, rarity) {
   if (weaponCache.has(key)) return weaponCache.get(key);
   const hw = { base, rarity };
   const pose = { ...heroPose({ weapon: hw, aim: 0 }, 0), sa: base === 'bow' ? 0 : -0.75, yaw: 0, fx: 0, fy: -20, bx: -40, by: -10 };
-  const all = heroPixels(pose, COSTUMES[0], rarity);
-  const body = heroPixels({ ...pose, weapon: undefined }, COSTUMES[0], rarity);
+  const all = heroPixels(pose, COSTUMES.knight, rarity);
+  const body = heroPixels({ ...pose, weapon: undefined }, COSTUMES.knight, rarity);
   // 体のピクセルを消す（同じ位置で同じ色なら体）
   const out = new Uint8ClampedArray(all.rgba);
   for (let y = 0; y < all.h; y++) for (let x = 0; x < all.w; x++) {
@@ -99,8 +99,20 @@ export class PixRenderer {
     this.chestImg = {
       closed: bake(FX.chestOpen, {}, 0.01, 176, 112, 88, 96),
       gold: bake(FX.chestOpen, { wood: ['#1a1006', '#3a2408', '#5e3a0c', '#86520c', '#b07a1a', '#d4a030', '#f0c860'] }, 0.01, 176, 112, 88, 96),
-      open: bake(FX.chestOpen, { coins: 0 }, 2.6, 176, 112, 88, 96),
     };
+    this.actors = new Map();
+  }
+
+  // エフェクトに渡す本物の体（魔物は type ごと、主人公はジョブごと）
+  monsterActor(t, v, flip) {
+    const key = 'm' + t + (v || 0) + (flip ? 1 : 0);
+    if (!this.actors.has(key)) this.actors.set(key, actorFrom(monsterPixels({ type: t, v: v || 0, state: 'idle', k: 0, ph: 0, t: 0 }, !!flip)));
+    return this.actors.get(key);
+  }
+  heroActor(job) {
+    const key = 'h' + job;
+    if (!this.actors.has(key)) this.actors.set(key, actorFrom(heroPixels(heroPose({ weapon: null, aim: 0.2 }, 0), COSTUMES[job], 0)));
+    return this.actors.get(key);
   }
 
   resize() {
@@ -162,7 +174,7 @@ export class PixRenderer {
   // ---------------- スプライト ----------------
   heroSprite(p) {
     const pose = heroPose(p, this.g.time);
-    const ci = p.pal === COSTUMES[1] || p.id === 1 ? 1 : 0;
+    const ci = p.job || 'knight';
     const rar = p.weapon ? p.weapon.rarity : 0;
     const key = ci + '|' + rar + '|' + poseKey(pose);
     let s = this.heroCache.get(key);
@@ -247,17 +259,22 @@ export class PixRenderer {
   slash(p) {
     const it = p.weapon;
     if (!it) return;
-    const W = WEAPONS[it.base];
-    const left = Math.cos(p.aim) < 0;
-    const x = P(p.x), y = P(p.y) + Math.round(Math.sin(p.aim) * 10);
-    const pal = RARE_RAMP[it.rarity];
+    const a = p.aimLock > 0 ? p.lockA : p.aim;
+    const left = Math.cos(a) < 0;
     const aff = it.affixes || [];
     const sparks = aff.includes('frost') ? ['#ffffff', '#dcfbff', '#a6ecff', '#62c8f4'] : ['#fff3a6', '#ffe26b', '#ff8a2a', '#f2561d'];
-    const o = { x, y, flip: left, palette: aff.includes('burn') ? FIRE_RAMP.slice(2) : pal, sparks };
-    if (it.base === 'sword') this.fx.add(FX.swordSlash, { ...o, radius: 40 });
-    else if (it.base === 'dagger') this.fx.add(FX.doubleSlash, o);
-    else if (it.base === 'axe') this.fx.add(FX.hammerSmash, o);
-    else if (it.base === 'spear') this.fx.add(FX.thrust, o);
+    const o = { flip: left, palette: aff.includes('burn') ? FIRE_RAMP.slice(2) : RARE_RAMP[it.rarity], sparks };
+    const X = P(p.x), Y = P(p.y);
+    if (it.base === 'axe') {
+      // 鎚は地面を叩くので回さず、狙った位置に置く
+      this.fx.add(FX.hammerSmash, { ...o, x: X + Math.round(Math.cos(a) * 8), y: Y + Math.round(Math.sin(a) * 26) });
+      return;
+    }
+    const mod = it.base === 'sword' ? FX.swordSlash : it.base === 'dagger' ? FX.doubleSlash : it.base === 'spear' ? FX.thrust : null;
+    if (!mod) return;
+    // 体の中心を軸に、狙った方向へ回す
+    const ang = left ? a + Math.PI : a, h = 20;
+    this.fx.add(mod, { ...o, angle: ang, x: X - Math.round(h * Math.sin(ang)), y: Y - h + Math.round(h * Math.cos(ang)), ...(it.base === 'sword' ? { radius: 40 } : {}) });
   }
 
   vfx(type, d) {
@@ -276,16 +293,16 @@ export class PixRenderer {
       case 'die': {
         const x = P(d.x), y = P(d.y);
         if (d.t === 'slime' || d.t === 'slimeL') L.add(FX.sporeBurst, { x, y, palette: [['#3a0e14', '#7a1a24', '#c03030', '#f06050', '#ffb090', '#fff0e0'], ['#20103a', '#40206a', '#7040b0', '#a070e0', '#d8b0ff', '#f6e8ff'], ['#3a1806', '#702a10', '#c06018', '#f0a030', '#ffd870', '#fff4c0'], ['#0a1830', '#24507a', '#4080b8', '#78c0e8', '#c8f0ff', '#ffffff']][(d.v || 0) % 4] });
-        else if (d.t === 'bat') L.add(FX.shatterDeath, { x, y: y - 14, palette: ['#1a1824', '#3a3648', '#5a546e', '#867e9a', '#b8b0c8', '#e8e4f0'] });
-        else if (d.t === 'skel') L.add(FX.shatterDeath, { x, y, palette: ['#2a1814', '#4a302c', '#7a5444', '#b88a6a', '#e8c8a8', '#fff0e0'] });
-        else if (d.t === 'mage') L.add(FX.soulRise, { x, y, palette: FIRE_RAMP.slice(2) });
-        else if (d.t === 'golem') { L.add(FX.smallExplosion, { x, y, palette: ['#0a3028', '#146050', '#30b090', '#7affd0', '#c0fff0', '#ffffff'] }); L.add(FX.shatterDeath, { x, y: y - 30 }); }
+        else if (d.t === 'bat') L.add(FX.shatterDeath, { x, y, actor: this.monsterActor('bat', 0, d.f), palette: STONE });
+        else if (d.t === 'skel') L.add(FX.shatterDeath, { x, y, actor: this.monsterActor('skel', 0, d.f), palette: STONE });
+        else if (d.t === 'mage') L.add(FX.soulRise, { x, y, actor: this.monsterActor('mage', 0, d.f), palette: FIRE_RAMP.slice(2) });
+        else if (d.t === 'golem') { L.add(FX.smallExplosion, { x, y, palette: ['#0a3028', '#146050', '#30b090', '#7affd0', '#c0fff0', '#ffffff'] }); L.add(FX.shatterDeath, { x, y, actor: this.monsterActor('golem', d.v, d.f), palette: STONE }); }
         if (d.t !== 'golem') L.add(FX.poof, { x, y });
         break;
       }
       case 'boom': L.add(FX.smallExplosion, { x: P(d.x), y: P(d.y) + 8 }); break;
       case 'whirl': L.add(FX.spinSlash, { x: P(d.x), y: P(d.y) }); break;
-      case 'dash': L.add(FX.blinkOut, { x: P(d.x), y: P(d.y), palette: ['#062a26', '#0e5a52', '#1a8a7a', '#3ac0a8', '#7fe8d6', '#c8fff4', '#ffffff'] }); L.add(FX.blinkIn, { x: P(d.x2), y: P(d.y2), palette: ['#062a26', '#0e5a52', '#1a8a7a', '#3ac0a8', '#7fe8d6', '#c8fff4', '#ffffff'] }); break;
+      case 'dash': if (d.blink) { L.add(FX.blinkIn, { x: P(d.x), y: P(d.y), actor: EMPTY_ACTOR }); break; } L.add(FX.blinkOut, { x: P(d.x), y: P(d.y), actor: EMPTY_ACTOR, palette: ['#062a26', '#0e5a52', '#1a8a7a', '#3ac0a8', '#7fe8d6', '#c8fff4', '#ffffff'] }); L.add(FX.blinkIn, { x: P(d.x2), y: P(d.y2), actor: EMPTY_ACTOR, palette: ['#062a26', '#0e5a52', '#1a8a7a', '#3ac0a8', '#7fe8d6', '#c8fff4', '#ffffff'] }); break;
       case 'heal': L.add(FX.healAoe, { x: P(d.x), y: P(d.y), layer: 'ground' }); L.add(FX.heal, { x: P(d.x), y: P(d.y) }); break;
       case 'nova': L.add(FX.frostNova, { x: P(d.x), y: P(d.y) }); break;
       case 'chain': {
@@ -319,12 +336,51 @@ export class PixRenderer {
       case 'summon': L.add(FX.summonRise, { x: P(d.x), y: P(d.y) }); break;
       case 'level': L.add(FX.levelUp, { x: P(d.x), y: P(d.y) }); break;
       case 'revive': L.add(FX.resurrection, { x: P(d.x), y: P(d.y) }); break;
-      case 'hurt': L.add(FX.hitFlash, { x: P(d.x), y: P(d.y) - 18 }); break;
+      case 'hurt': L.add(FX.hitSpark, { x: P(d.x), y: P(d.y), height: 20 }); break;
       case 'block': L.add(FX.shieldBlock, { x: P(d.x), y: P(d.y), flip: d.left }); break;
+      case 'pfx': {
+        const o = { x: P(d.x), y: P(d.y), flip: !!d.f };
+        if (d.p) o.palette = PFX_PAL[d.p];
+        if (d.life) o.life = d.life;
+        if (d.h) o.height = 20;
+        L.add(FX[d.n], o);
+        break;
+      }
+      case 'zone': this.zoneFx(d); break;
       case 'exclaim': L.add(FX.exclamation, { x: P(d.x), y: P(d.y) - 34 }); break;
       case 'charge': L.add(FX.spellCharge, { x: P(d.x), y: P(d.y), palette: FIRE_RAMP.slice(1), life: 0.8 }); break;
       case 'collect': L.add(FX.collectBurst, { x: P(d.x), y: P(d.y) }); break;
     }
+  }
+
+  // 床に残るスキルの範囲（氷・茨・花）
+  zoneFx(d) {
+    const X = P(d.x), Y = P(d.y), rx = d.r * K, ry = rx * 0.72;
+    const COL = { ice: ['#dcfbff', '#a6ecff', '#62c8f4', '#3a8bd8'], thorn: ['#c8f070', '#6cb83a', '#86623a', '#46301e'], bloom: ['#ffd8e8', '#ec8ab0', '#c4ec7a', '#52a03e'] }[d.k].map((c) => hex(c));
+    const ring = hex(d.k === 'ice' ? '#a6ecff' : d.k === 'thorn' ? '#6cb83a' : '#ec8ab0');
+    const pts = [];
+    let sd = (X * 31 + Y * 17) >>> 0;
+    const rnd = () => { sd = (sd * 1664525 + 1013904223) >>> 0; return sd / 4294967296; };
+    for (let i = 0, n = Math.round(rx * ry * 0.09); i < n; i++) {
+      const a = rnd() * TAU, q = Math.sqrt(rnd());
+      pts.push({ x: X + Math.cos(a) * rx * q, y: Y + Math.sin(a) * ry * q, c: COL[Math.floor(rnd() * 4)], tall: rnd() < 0.3 ? 2 + Math.floor(rnd() * 5) : 0, ph: rnd() * 6 });
+    }
+    let t = 0;
+    const dur = d.dur;
+    this.fx.custom({
+      layer: 'ground',
+      update(dt) { t += dt; },
+      done: () => t >= dur,
+      draw(p) {
+        const fade = Math.min(1, (dur - t) / 0.4) * Math.min(1, t / 0.12);
+        for (const q of pts) {
+          p.dot(q.x, q.y, q.c, fade);
+          for (let h = 1; h <= q.tall; h++) p.dot(q.x, q.y - h, h === q.tall && Math.sin(t * 5 + q.ph) > 0.5 ? COL[0] : q.c, fade);
+        }
+        for (let a = 0; a < TAU; a += 0.09) p.dot(X + Math.cos(a + t) * rx, Y + Math.sin(a + t) * ry, ring, fade * 0.8);
+        p.glow(X, Y, rx, ring, 0.08 * fade);
+      },
+    });
   }
 
   // ---------------- 毎フレーム ----------------
@@ -337,6 +393,7 @@ export class PixRenderer {
     const left = camX - (VW >> 1), top = camY - (VH >> 1);
     this.left = left; this.top = top;
     this.syncFx();
+    this.pendingGlow = [];
     this.fx.update(g.rdt || 1 / 60);
 
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -352,6 +409,7 @@ export class PixRenderer {
     this.fx.render(c, left, top, 'ground');
     c.setTransform(1, 0, 0, 1, -left, -top);
 
+    this.drawPlates(t);
     // 攻撃の予兆
     for (const e of g.enemies) this.telegraph(e);
     for (const p of g.projs) if (p.kind === 'rock' && p.tx) {
@@ -370,6 +428,7 @@ export class PixRenderer {
     for (const p of players) ents.push({ y: p.y, d: () => this.drawHero(p) });
     for (const e of g.enemies) if (inView(e.x, e.y)) ents.push({ y: e.y, d: () => this.drawMonster(e, t) });
     for (const ch of m.chests) if (inView(ch.x, ch.y)) ents.push({ y: ch.y, d: () => this.drawChest(ch) });
+    for (const pz of m.puzzles) if (pz.kind === 'riddle' && !pz.done && inView(pz.x, pz.y)) ents.push({ y: pz.y, d: () => this.drawStele(pz, t) });
     for (const dc of this.decor) if (inView(dc.x, dc.y)) ents.push({ y: dc.y, d: () => this.drawDecor(dc, t) });
     for (const L of g.loot) if (inView(L.dx, L.dy)) ents.push({ y: L.dy, d: () => this.drawLoot(L, t) });
     for (const p of g.projs) if (p.kind === 'rock' && inView(p.x, p.y)) ents.push({ y: p.y, d: () => this.drawRock(p, t) });
@@ -408,6 +467,7 @@ export class PixRenderer {
     for (const e of g.enemies) if (e._glows) for (const gl of e._glows) this.glowDot(gl.x, gl.y, gl.r, gl.col, gl.k);
     for (const p of players) if (p._lan && !p.down) { this.glowDot(p._lan.x, p._lan.y, 9, '#ffc060', 0.9); this.glowDot(p._lan.x, p._lan.y, 3, '#ffffff', 0.9); }
     for (const tc of m.torches) if (inView(tc.x, tc.y)) this.glowDot(P(tc.x), (Math.floor(tc.y / T) + 1) * TP - 26, 18 + Math.sin(t * 9 + tc.x) * 2, '#ff8a2a', 0.35);
+    for (const [gx, gy, gr, gc, gk] of this.pendingGlow) this.glowDot(gx, gy, gr, gc, gk);
     for (const p of g.parts) if (p.glow) this.part(p);
     c.globalCompositeOperation = 'source-over';
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -482,6 +542,7 @@ export class PixRenderer {
       if (p.kind === 'arrow') fx = L.add(FX.arrow, { follow, ...follow(), palette: p.rar >= 2 ? [RARE_RAMP[p.rar][2], RARE_RAMP[p.rar][4], '#e8e2d6', '#ffffff'] : undefined });
       else if (p.kind === 'fireball') fx = L.add(FX.fireball, { follow, ...follow(), radius: 5 });
       else if (p.kind === 'bolt') fx = L.add(FX.plasmaShot, { follow, ...follow(), palette: RARE_RAMP[Math.max(2, p.rar || 0)].concat(['#ffffff']), size: 4 });
+      else if (p.kind === 'lance') fx = L.add(FX.iceLance, { follow, ...follow() });
       else if (p.kind === 'eorb') fx = L.add(FX.plasmaShot, { follow, ...follow(), palette: FIRE_RAMP.slice(1), size: 4 });
       if (fx) this.projFx.set(p.id, fx);
     }
@@ -489,13 +550,13 @@ export class PixRenderer {
     // 敵の状態異常
     const seen = new Set();
     for (const e of g.enemies) {
-      for (const [kind, on, mod, extra] of [['b', e.burn > 0, FX.burning, {}], ['r', !!e.enraged, FX.rage, {}]]) {
+      const body = () => this.monsterActor(e.type, e.var, Math.cos(e.aim || 0) < 0);
+      for (const [kind, on, mod] of [['b', e.burn > 0, FX.burning], ['r', !!e.enraged, FX.rage], ['t', e.stun > 0, FX.stunned], ['m', e.mark > 0, FX.cursed]]) {
         const key = e.id + kind;
         if (!on) continue;
         seen.add(key);
         if (!this.statusFx.has(key)) {
-          const H = e.type === 'golem' ? 60 : 0;
-          this.statusFx.set(key, L.add(mod, { ...extra, follow: () => (g.enemies.includes(e) ? { x: P(e.x), y: P(e.y) - H } : null), x: P(e.x), y: P(e.y) - H }));
+          this.statusFx.set(key, L.add(mod, { actor: body(), follow: () => (g.enemies.includes(e) ? { x: P(e.x), y: P(e.y) } : null), x: P(e.x), y: P(e.y) }));
         }
       }
     }
@@ -556,6 +617,30 @@ export class PixRenderer {
     }
   }
 
+  drawPlates(t) {
+    const g = this.g, c = this.x;
+    for (const pz of g.map.puzzles) {
+      if (pz.kind !== 'plates' || pz.done) continue;
+      const multi = !!g.ally, plates = multi ? pz.plates.slice(0, 2) : pz.plates;
+      // 一人のときは、光る順番を繰り返し見せる
+      const hint = !multi ? pz.seq[Math.floor(t / 0.7) % 4] : -1;
+      plates.forEach((q, i) => {
+        const X = P(q.x), Y = P(q.y), lit = (pz.lit || []).includes(i), show = lit || hint === i;
+        c.fillStyle = '#1c1820'; c.beginPath(); c.ellipse(X, Y, 17, 11, 0, 0, TAU); c.fill();
+        c.fillStyle = show ? '#ffd27a' : '#5a5462'; c.beginPath(); c.ellipse(X, Y - 1, 15, 9, 0, 0, TAU); c.fill();
+        c.fillStyle = show ? '#fff6d0' : '#3a3644'; c.fillRect(X - 5, Y - 2, 10, 2); c.fillRect(X - 1, Y - 6, 2, 10);
+        if (show) this.pendingGlow.push([X, Y, 24, '#ffd27a', 0.7]);
+      });
+    }
+  }
+
+  drawStele(pz, t) {
+    const s = steleSprite();
+    this.shadow(P(pz.x), P(pz.y) + 1, 11);
+    this.x.drawImage(s, P(pz.x) - (s.width >> 1), P(pz.y) - s.height);
+    this.pendingGlow.push([P(pz.x), P(pz.y) - 18, 16 + Math.sin(t * 3) * 2, '#7fd0ff', 0.6]);
+  }
+
   drawHero(p) {
     const c = this.x;
     const X = P(p.x), Y = P(p.y);
@@ -593,8 +678,8 @@ export class PixRenderer {
   }
 
   drawChest(ch) {
-    const img = ch.open ? (ch.openT >= 1 ? this.chestImg.open : null) : ch.gold ? this.chestImg.gold : this.chestImg.closed;
-    if (!img) return;
+    if (ch.open) return; // 開いた後は開封エフェクトが描き、終わると消える
+    const img = ch.gold ? this.chestImg.gold : this.chestImg.closed;
     this.x.drawImage(img, P(ch.x) - 88, P(ch.y) + 4 - 96);
   }
 
@@ -607,6 +692,9 @@ export class PixRenderer {
     if (it.cat === 'weapon') {
       const w = weaponSprite(it.base, it.rarity);
       c.drawImage(w, X - (w.width >> 1), Y - bob - (w.height >> 1) - 4);
+    } else if (it.cat === 'gear') {
+      const gs = gearSprite(it.slot, it.rarity);
+      c.drawImage(gs, X - (gs.width >> 1), Y - bob - gs.height);
     } else {
       const sc = scrollSprite();
       c.drawImage(sc, X - (sc.width >> 1), Y - bob - sc.height);
@@ -700,6 +788,38 @@ const SPR = (rows, pal) => {
   rows.forEach((r, y) => [...r].forEach((ch, i) => { if (ch !== '.') { x.fillStyle = pal[ch]; x.fillRect(i, y, 1, 1); } }));
   return c;
 };
+const STONE = ['#1a1824', '#3a3648', '#5a546e', '#867e9a', '#b8b0c8', '#d8d4e0', '#f0eef4', '#ffffff'];
+const PFX_PAL = {
+  gold: ['#2a1405', '#5c3008', '#9a5a0e', '#d48e18', '#f5b92c', '#ffde5e', '#fff4bc', '#ffffff'],
+  fire: FIRE_RAMP,
+  green: ['#0e2a12', '#1e5a28', '#3a8a46', '#6ac078', '#9fe6a0', '#d8ffd8', '#ffffff'],
+};
+let steleC = null;
+function steleSprite() {
+  if (steleC) return steleC;
+  steleC = SPR([
+    '...kkkkkkkk...', '..kaaaaaaabk..', '.kaabbbbbbbck.', '.kabbbbbbbbck.', '.kabgggggbbck.', '.kabbbbbbbbck.', '.kabggggbbbck.', '.kabbbbbbbbck.',
+    '.kabgggggbbck.', '.kabbbbbbbbck.', '.kabgggbbbbck.', '.kabbbbbbbbck.', '.kabbbbbbbbck.', '.kbbbbbbbbbck.', '.kbbbbbbbbcck.', 'kkkkkkkkkkkkkk', 'keeeeeeeeeeeek', 'kffffffffffffk', 'kkkkkkkkkkkkkk',
+  ], { k: '#140f1c', a: '#8a8498', b: '#5e586c', c: '#3e3a4a', g: '#7fd0ff', e: '#4e4a58', f: '#2e2a36' });
+  return steleC;
+}
+const GEAR_ROWS = {
+  head: ['...kkkkkk...', '..kaaabbbk..', '.kaabbbbbck.', '.kabbbbbcck.', '.kabkkkkkck.', '.kbbkggkkck.', '.kbbbbbbcck.', '..kbbkkcck..', '...kk..kk...'],
+  body: ['.kkk....kkk.', 'kaabkkkkbbck', 'kabbaabbbbck', '.kkabbbbbkk.', '..kabbbbck..', '..kabggbck..', '..kabbbbck..', '..kbbbbcck..', '...kkkkkk...'],
+  hands: ['..kk.kk.kk..', '.kabkabkbck.', '.kabkabkbck.', '.kabbabbbck.', '.kabbbbbbck.', '.kabggbbcck.', '..kabbbcck..', '..kbbbbcck..', '...kkkkkk...'],
+  feet: ['..kkkkk.....', '..kaabbk....', '..kabbck....', '..kabbck....', '..kabbckkk..', '..kabbbbbbk.', '.kabbggbbck.', '.kbbbbbbcck.', '..kkkkkkkk..'],
+  charm: ['....kkkk....', '...k....k...', '...k....k...', '....kkkk....', '...kaabbk...', '..kabggbck..', '..kabggbck..', '...kbbcck...', '....kkkk....'],
+};
+const gearC = new Map();
+export function gearSprite(slot, rarity) {
+  const key = slot + rarity;
+  if (gearC.has(key)) return gearC.get(key);
+  const col = RARITY[rarity].color, n = parseInt(col.slice(1), 16);
+  const sh = (k) => `rgb(${((n >> 16) & 255) * k | 0},${((n >> 8) & 255) * k | 0},${(n & 255) * k | 0})`;
+  const c = SPR(GEAR_ROWS[slot], { k: '#140f1c', a: '#ffffff', b: sh(0.85), c: sh(0.5), g: '#fff0a0' });
+  gearC.set(key, c);
+  return c;
+}
 let scrollC = null;
 export function scrollSprite() {
   if (scrollC) return scrollC;
