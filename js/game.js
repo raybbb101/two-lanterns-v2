@@ -6,6 +6,7 @@ import { WEAPONS, SKILLS, SCROLL_POOL, ENEMIES, ENEMY_TYPES, RARITY, skillPower,
 import { JOBS, startKit, computeStats, skillLevels } from './jobs.js';
 import { sfx } from './audio.js';
 import { UI } from './ui.js';
+import { loadSave, writeSave } from './save.js';
 
 const STATES = ['idle', 'chase', 'wind', 'atk', 'rec'];
 const PKINDS = ['arrow', 'bolt', 'fireball', 'eorb', 'rock', 'lance'];
@@ -46,6 +47,14 @@ export class Game {
     this.zones = []; this.delayed = [];
     this.me = this.makePlayer(this.isHost ? 0 : 1, opts.name, opts.job || 'knight');
     Object.assign(this.me, startKit(this.me.job));
+    // 続きから：装備・スキル・レベルを戻す
+    const sv = loadSave(this.me.job);
+    this.maxFloor = 1;
+    if (sv) {
+      const { weapon, inventory, skills, slots, gear, tree, branch, sp } = sv;
+      Object.assign(this.me, { weapon, inventory, skills, slots, gear, tree, branch, sp });
+      this.lvl = sv.lvl; this.xp = sv.xp; this.maxFloor = sv.floor;
+    }
     this.refreshStats(true);
     this.ally = null;
 
@@ -53,10 +62,15 @@ export class Game {
     this.ui = new UI(this);
     this.bindInput();
     this.resize();
+    this.saveT = 5;
+    this._onHide = () => this.saveGame();
+    window.addEventListener('pagehide', this._onHide);
+    this._onVis = () => { if (document.visibilityState === 'hidden') this.saveGame(); };
+    document.addEventListener('visibilitychange', this._onVis);
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
     if (this.net) this.bindNet();
-    if (this.isHost) this.loadFloor(1, (Math.random() * 1e9) | 0);
+    if (this.isHost) this.loadFloor(this.maxFloor, (Math.random() * 1e9) | 0);
     else this.ui.waiting(true);
     this.last = performance.now();
     this.running = true;
@@ -120,7 +134,20 @@ export class Game {
     this.cv.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
+  saveGame() {
+    if (!this.map) return;
+    const { job, name, weapon, inventory, skills, slots, gear, tree, branch, sp } = this.me;
+    this.maxFloor = Math.max(this.maxFloor, this.floor);
+    if (!writeSave({ job, name, weapon, inventory, skills, slots, gear, tree, branch, sp, lvl: this.lvl, xp: this.xp, floor: this.maxFloor }) && !this.saveWarned) {
+      this.saveWarned = true;
+      this.ui.toast('このブラウザでは保存できません（プライベートモードなど）', '#ff8a6a');
+    }
+  }
+
   destroy() {
+    this.saveGame();
+    window.removeEventListener('pagehide', this._onHide);
+    document.removeEventListener('visibilitychange', this._onVis);
     this.running = false;
     window.removeEventListener('keydown', this._kd);
     window.removeEventListener('keyup', this._ku);
@@ -149,6 +176,8 @@ export class Game {
       n.on('open', () => {});
       n.on('hello', (d) => {
         this.ally = this.makePlayer(1, d.name, d.job);
+        // レベルは二人で共通：高いほうに合わせる
+        if (d.lvl > this.lvl) this.setXp(d.xp, d.lvl);
         this.ally.x = this.me.x + 30; this.ally.y = this.me.y;
         this.ally.tx = this.ally.x; this.ally.ty = this.ally.y;
         n.send({
@@ -199,7 +228,7 @@ export class Game {
       n.on('xp', (d) => this.setXp(d.xp, d.lvl));
       n.on('rev', () => this.reviveLocal());
       n.on('close', () => this.ui.fatal('ホストとの接続が切れました。'));
-      n.send({ t: 'hello', name: this.me.name, job: this.me.job });
+      n.send({ t: 'hello', name: this.me.name, job: this.me.job, lvl: this.lvl, xp: this.xp });
     }
   }
 
@@ -239,6 +268,7 @@ export class Game {
     const sp = Math.hypot(a.rvx || 0, a.rvy || 0);
     a.vx = a.rvx || 0; a.vy = a.rvy || 0;
     a.moveAmt = lerp(a.moveAmt, clamp(sp / SPEED, 0, 1), Math.min(1, dt * 10));
+    this.updateFacing(a, dt, sp > 40 ? Math.atan2(a.rvy, a.rvx) : null, a.atkT < a.atkDur + 0.18);
     a.walkPh += Math.hypot(a.x - px, a.y - py) * 0.075;
     a.atkT += dt;
     if (a.dodgeT > 0) a.dodgeT -= dt;
@@ -329,6 +359,7 @@ export class Game {
       if (this.net) this.net.send({ t: 'floor', n, seed, wipe });
     }
     this.ui.floorBanner(n, this.map.theme.name, wipe);
+    this.saveGame();
   }
 
   spawnEnemies() {
@@ -374,6 +405,8 @@ export class Game {
       else this.update(sdt, dt);
       this.render();
     }
+    this.saveT -= dt;
+    if (this.saveT <= 0) { this.saveT = 5; this.saveGame(); }
     this.ui.frame(dt);
     this.pressed.clear();
     requestAnimationFrame(this.loop);
@@ -469,6 +502,8 @@ export class Game {
     const il = Math.hypot(ix, iy);
     if (il) { ix /= il; iy /= il; }
     const busy = this.ui.modalOpen;
+    if (me.faceHold > 0) me.faceHold -= dt;
+    this.updateFacing(me, dt, me.dodgeT > 0 || me.dashT > 0 ? Math.atan2(me.dvy, me.dvx) : il ? Math.atan2(iy, ix) : null, me.faceHold > 0);
 
     if (this.pressed.has(' ') && me.dodgeCd <= 0 && me.dashT <= 0) {
       let dx = ix, dy = iy;
@@ -546,6 +581,19 @@ export class Game {
     }
   }
 
+  // 歩いている間は進む方向を、立ち止まると狙う方向（マウス）を向く。攻撃中は攻撃する方向
+  updateFacing(p, dt, walkA, attacking) {
+    let target;
+    if (walkA != null && !attacking) target = walkA;
+    else {
+      const tilt = clamp(Math.sin(p.aim) * 0.7, -0.6, 0.6);
+      target = Math.cos(p.aim) < 0 ? Math.PI - tilt : tilt;
+    }
+    if (p.faceYaw == null) p.faceYaw = target;
+    p.faceYaw += angDiff(p.faceYaw, target) * (1 - Math.exp(-dt * (attacking ? 40 : 20)));
+    p.faceYaw = Math.atan2(Math.sin(p.faceYaw), Math.cos(p.faceYaw));
+  }
+
   swingLantern(p, dt) {
     const acc = (p.vx - p.lastVx) / Math.max(dt, 0.001);
     p.lastVx = p.vx;
@@ -583,6 +631,7 @@ export class Game {
     const tgt = this.nearestEnemy(me.x, me.y, reach);
     const rate = it.rate * (1 - me.stats.haste);
     me.atkSeq++; me.atkT = 0; me.atkDur = atkDurFor(it) * (1 - me.stats.haste); me.atkCd = rate;
+    me.faceHold = me.atkDur + 0.18;
     this.lockAim(tgt ? Math.atan2(tgt.y - me.y, tgt.x - me.x) : me.aim, me.atkDur * 0.8);
     this.pix.slash(me);
     sfx(W.kind === 'bow' ? 'bow' : W.kind === 'staff' ? 'cast' : W.kind === 'thrust' ? 'thrust' : it.base === 'axe' ? 'heavy' : 'swing');
@@ -707,6 +756,7 @@ export class Game {
       if (tgt) { d.aim = Math.atan2(tgt.y - me.y, tgt.x - me.x); d.tx = tgt.x; d.ty = tgt.y; }
       else { const L = Math.min(260, dist(me.x, me.y, this.mouseWorld.x, this.mouseWorld.y)); d.tx = me.x + Math.cos(me.aim) * L; d.ty = me.y + Math.sin(me.aim) * L; }
       this.lockAim(d.aim, 0.35);
+      me.faceHold = 0.4;
       if (id === 'shadowstep') {
         // 敵の背後へ
         const bx = tgt.x + Math.cos(d.aim) * (tgt.r + 18), by = tgt.y + Math.sin(d.aim) * (tgt.r + 18);

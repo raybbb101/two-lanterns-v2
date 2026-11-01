@@ -255,3 +255,10 @@ canvas#game, #titleArt, #portrait { image-rendering: pixelated; }
 .tpanel h1 .jp { font-size: 44px; }
 .lead { margin: 8px 0 12px; }
 @media (max-width: 900px) { .tabcols.c3, .tabcols.c2, .branches { grid-template-columns: 1fr; } }
+
+/* 保存 */
+.saveRow { display: flex; align-items: center; gap: 6px; }
+.saveRow span { flex: 1; color: var(--muted); font-size: 12px; }
+.saveRow span.has { color: var(--brass-hi); font-weight: 700; }
+.saveRow button { padding: 3px 8px; font-size: 11px; }
+#jobPick .lv { color: var(--brass-hi); font-size: 10px; min-height: 12px; }

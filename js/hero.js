@@ -204,7 +204,7 @@ export function heroPose(h, t) {
   const left = Math.cos(h.aim) < 0;
   // 上下を狙うと少しこちら／奥を向く
   const tilt = Math.max(-0.6, Math.min(0.6, Math.sin(h.aim) * 0.7));
-  let yaw = left ? Math.PI - tilt : tilt;
+  let yaw = h.faceYaw != null ? h.faceYaw : left ? Math.PI - tilt : tilt;
   let pose;
   if (h.down) {
     pose = { ...S, crouch: 12, lean: 10, fx: 14, fy: -4, sa: 0.2, bx: 10, by: -4, ffx: 4, fbx: -8 };

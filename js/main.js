@@ -4,6 +4,7 @@ import { initAudio } from './audio.js';
 import { drawPortrait } from './icons.js';
 import { makeWeapon } from './data.js';
 import { JOBS, JOB_KEYS } from './jobs.js';
+import { loadSave, writeSave, deleteSave, exportSave, importSave } from './save.js';
 import { rand, TAU } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -35,6 +36,7 @@ function exitToTitle() {
   $('title').classList.remove('hidden');
   busy(false);
   status('');
+  showSave();
   titleRun = true;
   requestAnimationFrame(titleLoop);
 }
@@ -68,9 +70,41 @@ const pickJob = (j) => {
   store.set('ftn-job', j);
   document.querySelectorAll('#jobPick button').forEach((b) => b.classList.toggle('on', b.dataset.job === j));
   $('jobDesc').textContent = JOBS[j].desc;
+  showSave();
   if (heroes) { heroes[0].job = j; heroes[0].weapon = makeWeapon(JOBS[j].weapon, 2, 1); }
 };
 let heroes = null;
+function showSave() {
+  const sv = loadSave(selJob);
+  $('saveInfo').textContent = sv ? `続きから：Lv ${sv.lvl} ・ 第 ${sv.floor} 層` : 'はじめから';
+  $('saveInfo').classList.toggle('has', !!sv);
+  $('btnReset').classList.toggle('hidden', !sv);
+  $('btnExport').classList.toggle('hidden', !sv);
+  document.querySelectorAll('#jobPick button').forEach((b) => {
+    const s = loadSave(b.dataset.job), tag = b.querySelector('.lv');
+    if (tag) tag.textContent = s ? `Lv ${s.lvl}` : '';
+  });
+}
+$('btnReset').onclick = () => {
+  if (!confirm(`${JOBS[selJob].name}の保存データを消して、最初からにしますか？\n元には戻せません。`)) return;
+  deleteSave(selJob);
+  showSave();
+};
+$('btnExport').onclick = async () => {
+  const code = exportSave(loadSave(selJob));
+  try { await navigator.clipboard.writeText(code); status('保存データをコピーしました。メモなどに貼って残せます。'); }
+  catch (e) { prompt('この文字列をコピーして残してください', code); }
+};
+$('btnImport').onclick = () => {
+  const text = prompt('書き出した保存データを貼り付けてください');
+  if (!text) return;
+  const d = importSave(text);
+  if (!d) { status('保存データを読み込めませんでした', true); return; }
+  if (loadSave(d.job) && !confirm(`今ある${JOBS[d.job].name}の保存データを上書きしますか？`)) return;
+  writeSave(d);
+  pickJob(d.job);
+  status(`${JOBS[d.job].name}の保存データを読み込みました`);
+};
 const qp = new URLSearchParams(location.search).get('room');
 if (qp) $('codeInput').value = qp.toUpperCase();
 
@@ -81,7 +115,7 @@ heroes = [
   { job: selJob, weapon: makeWeapon(JOBS[selJob].weapon, 2, 1), portraitAim: 0.3 },
   { job: selJob === 'ranger' ? 'knight' : 'ranger', weapon: makeWeapon(selJob === 'ranger' ? 'sword' : 'bow', 3, 1), portraitAim: Math.PI - 0.3 },
 ];
-$('jobPick').innerHTML = JOB_KEYS.map((j) => `<button type="button" data-job="${j}"><canvas width="40" height="44"></canvas>${JOBS[j].name}</button>`).join('');
+$('jobPick').innerHTML = JOB_KEYS.map((j) => `<button type="button" data-job="${j}"><canvas width="40" height="44"></canvas>${JOBS[j].name}<small class="lv"></small></button>`).join('');
 document.querySelectorAll('#jobPick button').forEach((b) => {
   const j = b.dataset.job;
   drawPortrait(b.querySelector('canvas').getContext('2d'), { job: j, weapon: null }, 0, 1, 20, 42);

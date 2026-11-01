@@ -64,7 +64,7 @@ export function skillIconURL(id, S = 48) {
 
 /** キャラクター画面・タイトル用の大きな主人公 */
 export function drawPortrait(c, me, t, k = 5, cx, footY) {
-  const h = { ...me, aim: me.portraitAim ?? 0.25, moveAmt: 0, atkT: 9, atkDur: 0.3, dodgeT: 0, down: false, skillAnim: null };
+  const h = { ...me, faceYaw: null, aim: me.portraitAim ?? 0.25, moveAmt: 0, atkT: 9, atkDur: 0.3, dodgeT: 0, down: false, skillAnim: null };
   const pose = heroPose(h, t);
   const o = heroPixels(pose, COSTUMES[me.job || 'knight'], me.weapon ? me.weapon.rarity : 0);
   const tmp = mk(o.w, o.h);
